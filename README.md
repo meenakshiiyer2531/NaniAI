@@ -2,9 +2,21 @@
 
 **Meals that respect your health *and* your culture.**
 
-NaniAI is a culturally-grounded meal agent for seniors living with health conditions. It pairs a **deterministic clinical-safety gate** with **Qloo's cultural taste graph** so its advice is simultaneously *safe* and *familiar* — the millet version of the dish your grandmother already loves, not a kale smoothie.
+NaniAI is a personalized food & wellness companion. It pairs a **deterministic clinical-safety gate** with **Qloo's cultural taste graph** and a real **NVIDIA open-source model**, so its advice is simultaneously *safe* and *familiar* — the millet version of the dish your grandmother already loves, not a kale smoothie.
 
-> Runs end-to-end with **no API keys** (deterministic mock mode), lights up the live Qloo taste graph the moment a Qloo key is present, and can route its language reasoning to **any OpenAI-compatible model** (e.g. NVIDIA's API, or Nebius) via one env switch.
+Built for real, different lives: **seniors with health conditions, new mothers, students in PGs/hostels, busy professionals**, and anyone who wants to eat well without giving up the food they love. It learns your cuisines, favourite dishes, allergies, conditions, medications, lifestyle and daily routine during onboarding, then plans a safe, familiar day — and highlights the right meal for the time of day (breakfast in the morning, dinner at night).
+
+> Runs end-to-end with **no API keys** (deterministic mock mode), lights up the live Qloo taste graph the moment a Qloo key is present, and routes its language reasoning to **any OpenAI-compatible model** (e.g. NVIDIA's API, or Nebius) via one env switch.
+
+## What you can do
+
+- **Create a private account** (email/password) — your health profile is stored per-user with database Row Level Security.
+- **Onboard conversationally**, one question at a time: name, age, gender (sets your avatar), cuisines you love (all-India + international, searchable + free text), favourite dishes (type anything), allergies, **any** health condition or medication (free-text search, not a fixed list), spice/texture, lifestyle (working/student, living arrangement, workplace food, cook time), and an optional emergency contact.
+- **Plan a safe, familiar day** — breakfast, lunch, snack, dinner — with the current time's meal auto-highlighted and suggested meal times.
+- **Swap any meal** between safe, culturally-close options; see the recipe, nutrition, and a recipe-video link.
+- **Ask NaniAI** anything about food, swaps, ingredients, and general nutrition — answered by a real NVIDIA open model, using your profile for context, with safety guardrails (medication/emergency questions are routed, never model-cleared).
+- **Emergency**: one tap opens WhatsApp to your trusted contact with a prefilled message, alongside a calming breathing guide and verified helpline numbers.
+- **Edit everything** anytime on a dedicated profile page.
 
 ## Integration status (honest)
 
@@ -38,20 +50,20 @@ The irreplaceable moment: when a beloved dish is unsafe, Qloo substitutes the **
 
 ## The agentic workflow (not a chatbot)
 
-Three cooperating agents, with their reasoning shown in the UI:
+Three cooperating steps run **server-side**; the customer UI shows a friendly explanation (via a hover ⓘ), never internal agent traces:
 
 1. **Clinician agent** — deterministic hard-constraint gate (`lib/agents/clinician.ts`). Enforces sugar/sodium/carb/potassium caps, texture (IDDSI-inspired), allergies, and drug–food interactions. **The LLM cannot widen this set.**
 2. **Culture agent** — queries Qloo (`lib/agents/culture.ts` + `lib/qloo/`) for cultural familiarity of each *safe* candidate.
-3. **Negotiator** — composes the day, and when a favorite is unsafe, proposes the **taste-preserving substitution** with a plain-language trade-off (`lib/agents/negotiator.ts`).
+3. **Negotiator** — composes the day, and when a favorite is unsafe, proposes the **taste-preserving substitution**, then narrates the plan in plain language via the configured model (`lib/agents/negotiator.ts`).
 
-## Seven differentiators
+## Differentiators
 
 1. **Taste-Preserving Substitution Engine** — nearest *culturally-adjacent* safe dish, not a random healthy one.
 2. **Hard-Constraint Clinician Gate** — deterministic safety the model can't override.
-3. **Multi-agent negotiation** with visible trade-off explanations.
-4. **Live "Generic LLM vs Qloo-grounded" side-by-side** — the difference Qloo makes, on screen.
-5. **Groundedness receipts** — every pick cites the Qloo evidence it used (honest "mock"/"unavailable" labels when the graph is off).
-6. **Cultural Familiarity Score (0–100)** per dish and per plan — the measurable outcome.
+3. **Any-condition / any-medication** — free-text search, not a fixed list; mapped to safety rules where we have them, saved as context otherwise. Never a diagnosis.
+4. **Qloo-grounded ranking** — measured in the eval harness as a familiarity delta vs a culturally-blind baseline (`npm run eval`).
+5. **Honest sourcing** — the app never presents mock data as a live Qloo or model result; `/api/qloo/health` and `/api/model/health` verify the real integrations.
+6. **Time-aware & personalized** — current meal highlighted by time of day; plans shaped by cuisines, favourites, lifestyle, and routine.
 7. **Portable Model Gateway** — one agent, a provider-neutral brain: deterministic keyless mock ↔ any OpenAI-compatible **NVIDIA open-source model**, selected by env var.
 
 ## Architecture
