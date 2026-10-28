@@ -33,6 +33,8 @@ type Catalog = {
   dishes: { id: string; name: string; cuisine: string; slots: string[] }[];
   cuisines: string[]; cuisineOptions?: string[]; regions: string[];
   conditions: { id: string; label: string }[];
+  conditionOptions?: string[]; medicationOptions?: string[];
+  lifestyleRoles?: string[]; goalOptions?: string[];
   allergies: string[]; medications: string[];
 };
 
@@ -56,6 +58,30 @@ function profileToPersona(p: Profile) {
     lovedFreeText: p.loved_dishes || [],
   };
 }
+
+function avatarEmoji(p: Profile): string {
+  const g = ((p.lifestyle as any)?.gender) || "";
+  if (g === "female") return "👩";
+  if (g === "male") return "👨";
+  return "🧑";
+}
+
+function currentSlot(): "breakfast" | "lunch" | "snack" | "dinner" {
+  const h = new Date().getHours();
+  if (h >= 5 && h < 11) return "breakfast";
+  if (h >= 11 && h < 16) return "lunch";
+  if (h >= 16 && h < 19) return "snack";
+  return "dinner";
+}
+function timeGreeting(): string {
+  const h = new Date().getHours();
+  if (h >= 5 && h < 12) return "Good morning";
+  if (h >= 12 && h < 17) return "Good afternoon";
+  if (h >= 17 && h < 21) return "Good evening";
+  return "Good night";
+}
+const SLOT_EMOJI: Record<string, string> = { breakfast: "🌅", lunch: "☀️", snack: "🫖", dinner: "🌙" };
+const SLOT_TIME: Record<string, string> = { breakfast: "7:00–8:30 am", lunch: "12:30–1:30 pm", snack: "4:00–5:00 pm", dinner: "7:00–8:00 pm" };
 
 export default function Home() {
   const configured = supabaseConfigured();
@@ -128,6 +154,7 @@ export default function Home() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "request failed");
       setData(json);
+      setExpanded({ [currentSlot()]: true }); // auto-open the meal for right now
     } catch (e) { setError((e as Error).message); }
     finally { setLoading(false); }
   }
@@ -137,6 +164,15 @@ export default function Home() {
     const { data: row, error: e } = await supabase.from("profiles").update(patch).eq("id", userId).select("*").maybeSingle();
     if (e) throw new Error(e.message);
     if (row) setProfile(row as Profile);
+  }
+
+  function openEmergency() {
+    const phone = (profile?.emergency_phone || "").replace(/\D/g, "");
+    if (phone.length >= 8) {
+      const msg = "Hi, I need your help urgently. Please contact me as soon as you can. If you can, please call me now.";
+      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, "_blank", "noopener");
+    }
+    setShowEmergency(true);
   }
 
   const effItems: PlanItem[] = useMemo(() => {
@@ -162,6 +198,9 @@ export default function Home() {
   if (!profile.onboarding_done) {
     return <Onboarding catalog={catalog} initial={profile} onDone={async (p) => { await saveProfile({ ...p, onboarding_done: true }); }} onSignOut={() => supabase!.auth.signOut()} />;
   }
+  if (showProfile && catalog) {
+    return <ProfilePage catalog={catalog} profile={profile} onBack={() => setShowProfile(false)} onSave={saveProfile} onSignOut={() => supabase!.auth.signOut()} />;
+  }
 
   return (
     <div className="wrap">
@@ -170,18 +209,19 @@ export default function Home() {
           <h1>Nani<span className="accent">AI</span></h1>
           <p>Meals that respect your <b>health limits</b> and your <b>culture</b> — safe advice that still tastes like home.</p>
         </div>
-        <div className="chips">
-          <button className="chip emergency-chip" onClick={() => setShowEmergency(true)}>🚨 Emergency</button>
-          <button className="chip" onClick={() => setShowProfile(true)}>⚙ My profile</button>
-          <span className="chip acct">👤 <b>{profile.preferred_name || "You"}</b><button className="signout" onClick={() => supabase!.auth.signOut()}>sign out</button></span>
-          <span className={`chip ${status?.qlooConfigured ? "live" : "mock"}`}>Qloo:&nbsp;<b>{status?.qlooConfigured ? "live" : "mock"}</b></span>
-        </div>
+        <nav className="topnav">
+          <button className="navbtn danger" onClick={openEmergency}>🚨 Emergency</button>
+          <button className="avatar-btn" onClick={() => setShowProfile(true)} title="My profile" aria-label="My profile">
+            <span className="avatar">{avatarEmoji(profile)}</span>
+            <span className="avatar-name">{profile.preferred_name || "You"}</span>
+          </button>
+          <button className="navbtn ghost" onClick={() => supabase!.auth.signOut()}>Sign out</button>
+        </nav>
       </header>
 
-      {showEmergency && <EmergencyModal profile={profile} onClose={() => setShowEmergency(false)} onSave={saveProfile} />}
-      {showProfile && catalog && <ProfileEditor catalog={catalog} profile={profile} onClose={() => setShowProfile(false)} onSave={saveProfile} />}
+      {showEmergency && <EmergencyScreen profile={profile} onClose={() => setShowEmergency(false)} onSave={saveProfile} onReopen={openEmergency} />}
 
-      <div className="greeting">Welcome back, <b>{profile.preferred_name || "friend"}</b> 👋 — let&rsquo;s plan meals that feel like home and keep you well.</div>
+      <div className="greeting">{timeGreeting()}, <b>{profile.preferred_name || "friend"}</b> {avatarEmoji(profile)} — it&rsquo;s <b>{currentSlot()}</b> time ({SLOT_TIME[currentSlot()]}). Let&rsquo;s plan meals that feel like home and keep you well.</div>
 
       <div className="cta">
         <button className="run" onClick={() => { setDay(0); run(0); }} disabled={loading}>{loading ? "Planning…" : "Plan a day"}</button>
@@ -191,27 +231,53 @@ export default function Home() {
       {error && <div className="err">⚠ {error}</div>}
       {loading && <div className="spinner">Building a safe, familiar day…</div>}
 
+      {!data && !loading && (
+        <div className="home-cards">
+          <button className="hcard primary" onClick={() => { setDay(0); run(0); }}>
+            <div className="hc-emoji">{SLOT_EMOJI[currentSlot()]}</div>
+            <div className="hc-title">Plan today&rsquo;s meals</div>
+            <div className="hc-sub">It&rsquo;s {currentSlot()} time — get a safe, familiar {currentSlot()} plus the rest of your day.</div>
+          </button>
+          <button className="hcard" onClick={() => setShowProfile(true)}>
+            <div className="hc-emoji">⚙️</div>
+            <div className="hc-title">My profile</div>
+            <div className="hc-sub">Tune cuisines, favourites, health & lifestyle anytime.</div>
+          </button>
+          <button className="hcard danger" onClick={openEmergency}>
+            <div className="hc-emoji">🚨</div>
+            <div className="hc-title">Emergency</div>
+            <div className="hc-sub">Reach your trusted contact & helplines fast.</div>
+          </button>
+          <div className="hcard flat">
+            <div className="hc-emoji">💬</div>
+            <div className="hc-title">Ask NaniAI</div>
+            <div className="hc-sub">Questions about food, swaps or nutrition? Tap the chat button, bottom-right.</div>
+          </div>
+        </div>
+      )}
+
       {data && totals && (
         <>
-          <div className="section-label">Your day — tap a meal for recipe, video &amp; options</div>
+          <div className="section-label">Your day — tap a meal for recipe, video &amp; options <InfoTip text={data.grounded.negotiation[data.grounded.negotiation.length - 1]?.message || "Chosen to match the cuisines and dishes you enjoy, then checked against your health limits."} /></div>
+          <div className="mealtip">🌅 Tip: try to eat <b>breakfast early</b> (by 8:30 am) and keep dinner lighter and before 8 pm — steadier energy and easier digestion. Suggested times are on each meal.</div>
           <div className="day-grid">
             {effItems.map((it) => {
               const recipe = buildRecipe(it.dish as any);
               const isOpen = expanded[it.slot];
               const orig = data.grounded.plan.items.find((o) => o.slot === it.slot)!;
               const optCount = 1 + (orig.alternatives?.length ?? 0);
+              const isNow = it.slot === currentSlot();
               return (
-                <div className="meal" key={it.slot}>
+                <div className={`meal ${isNow ? "now" : ""}`} key={it.slot}>
                   <div className="meal-top" onClick={() => setExpanded((e) => ({ ...e, [it.slot]: !e[it.slot] }))}>
                     <div>
-                      <div className="slot">{it.slot}</div>
+                      <div className="slot">{SLOT_EMOJI[it.slot]} {it.slot} {isNow && <span className="now-badge">now</span>}</div>
                       <div className="dish">{it.dish.name}</div>
-                      <div className="cuis">{it.dish.cuisine} · familiarity {it.familiarity}</div>
+                      <div className="cuis">{it.dish.cuisine} · suggested {SLOT_TIME[it.slot]}</div>
                     </div>
                     <div className="chev">{isOpen ? "▾" : "▸"}</div>
                   </div>
                   <div className="fam"><span style={{ width: `${it.familiarity}%` }} /></div>
-                  {it.receipt.length > 0 && <div className="receipt"><span className="qloo">Qloo:</span> {it.receipt.join(" · ")}</div>}
                   {isOpen && (
                     <div className="meal-detail">
                       <div className="nut">
@@ -276,15 +342,22 @@ export default function Home() {
 
           <div className="panels">
             <div className="panel">
-              <h3>🍽 Why these meals</h3>
-              <p className="explain">A day of meals tailored to your tastes and dietary needs — familiar, and within every limit that matters for your health. Tap a meal for the recipe, a video, and other safe options.</p>
-            </div>
-            <div className="panel">
               <h3>🛡 Kept out for your safety</h3>
               {data.rejected.length === 0 && <div className="rej">Nothing was left out — everything fits your needs.</div>}
               {data.rejected.map((r) => (
                 <div className="rej" key={r.id}><div className="n">{r.name}{r.loved && <span className="loved">♥ a favorite</span>}</div><div className="v">{r.violations.join(" · ")}</div></div>
               ))}
+            </div>
+            <div className="panel">
+              <h3>⏰ Suggested times today</h3>
+              <div className="timerows">
+                {(["breakfast", "lunch", "snack", "dinner"] as const).map((s) => (
+                  <div className={`timerow ${s === currentSlot() ? "now" : ""}`} key={s}>
+                    <span>{SLOT_EMOJI[s]} {s}</span><span className="tt">{SLOT_TIME[s]}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="explain-src">Have breakfast early and dinner before 8 pm for steadier energy.</div>
             </div>
           </div>
 
@@ -294,7 +367,7 @@ export default function Home() {
         </>
       )}
 
-      <ChatWidget profile={{ name: profile.preferred_name, cuisine: (profile.cuisines || [])[0], region: profile.region, conditions: profile.conditions, allergies: profile.allergies, lovedDishIds: profile.loved_dishes }} />
+      <ChatWidget profile={{ name: profile.preferred_name, cuisine: (profile.cuisines || []).join(", "), region: profile.region, conditions: profile.conditions, allergies: profile.allergies, lovedDishIds: profile.loved_dishes, disliked: profile.disliked, dietary_pattern: profile.dietary_pattern, goals: profile.goals, lifestyle: profile.lifestyle }} />
     </div>
   );
 }
@@ -382,10 +455,12 @@ function Onboarding({ catalog, initial, onDone, onSignOut }: { catalog?: Catalog
   const [dishInput, setDishInput] = useState("");
   const [busy, setBusy] = useState(false);
   const set = (patch: Draft) => setD((x) => ({ ...x, ...patch }));
+  const setLife = (k: string, v: any) => setD((x) => ({ ...x, lifestyle: { ...((x.lifestyle as any) || {}), [k]: v } }));
   const toggle = (key: keyof Draft, v: string) => {
     const arr = (d[key] as string[]) ?? [];
     set({ [key]: arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v] } as Draft);
   };
+  const life = (d.lifestyle as any) || {};
   const cuisineList = catalog?.cuisineOptions?.length ? catalog.cuisineOptions : (catalog?.cuisines ?? []);
 
   const steps = [
@@ -393,6 +468,10 @@ function Onboarding({ catalog, initial, onDone, onSignOut }: { catalog?: Catalog
       body: <input className="ob-input" value={d.preferred_name ?? ""} onChange={(e) => set({ preferred_name: e.target.value })} placeholder="e.g. Lakshmi" autoFocus /> },
     { key: "age", required: false, bg: "bg-sun", q: "How old are you?", hint: "Helps tailor portions and nutrition.",
       body: <input className="ob-input" inputMode="numeric" value={ageStr} onChange={(e) => { const v = e.target.value; if (v === "" || /^\d{1,3}$/.test(v)) { setAgeStr(v); set({ age: v === "" ? null : parseInt(v, 10) }); } }} placeholder="e.g. 68" /> },
+    { key: "gender", required: false, bg: "bg-spice", q: "How should we picture you?", hint: "Sets your avatar. Optional — pick whatever feels right.",
+      body: <div className="checks">{[{ e: "👩", v: "female", l: "Woman" }, { e: "👨", v: "male", l: "Man" }, { e: "🧑", v: "other", l: "Prefer not to say" }].map((o) => <button key={o.v} className={`check ${life.gender === o.v ? "on" : ""}`} onClick={() => setLife("gender", o.v)}>{o.e} {o.l}</button>)}</div> },
+    { key: "stage", required: false, bg: "bg-warm", q: "Anything special about right now?", hint: "So we can be extra helpful. Optional.",
+      body: <div className="checks">{["New mom / breastfeeding", "Recovering from illness", "Pregnant", "Managing weight", "Just want to eat better", "None of these"].map((v) => <button key={v} className={`check ${life.stage === v ? "on" : ""}`} onClick={() => setLife("stage", v)}>{v}</button>)}</div> },
     { key: "diet", required: false, bg: "bg-leaf", q: "How do you eat?",
       body: <div className="checks">{DIET.map((o) => <button key={o.v} className={`check ${d.dietary_pattern === o.v ? "on" : ""}`} onClick={() => set({ dietary_pattern: o.v })}>{o.l}</button>)}</div> },
     { key: "cuisines", required: false, bg: "bg-spice", q: "Which cuisines do you love?", hint: "Pick any — we never guess from where you live.",
@@ -404,13 +483,32 @@ function Onboarding({ catalog, initial, onDone, onSignOut }: { catalog?: Catalog
         <div className="dishadd"><input className="ob-input" value={dishInput} onChange={(e) => setDishInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && dishInput.trim()) { e.preventDefault(); toggle("loved_dishes", dishInput.trim()); setDishInput(""); } }} placeholder="e.g. Hyderabadi biryani" /><button type="button" className="run ghost" onClick={() => { if (dishInput.trim()) { toggle("loved_dishes", dishInput.trim()); setDishInput(""); } }}>Add</button></div>
         <div className="checks" style={{ marginTop: 8 }}>{((d.loved_dishes as string[]) ?? []).map((f) => <button key={f} className="check on" onClick={() => toggle("loved_dishes", f)}>♥ {f} ✕</button>)}</div>
       </> },
-    { key: "allergies", required: false, bg: "bg-leaf", q: "Any allergies or intolerances?", hint: "Important for safety. Skip if none.",
-      body: <div className="checks">{(catalog?.allergies ?? []).map((a) => <button key={a} className={`check ${((d.allergies as string[]) ?? []).includes(a) ? "on" : ""}`} onClick={() => toggle("allergies", a)}>{a}</button>)}</div> },
-    { key: "conditions", required: false, bg: "bg-spice", q: "Any health conditions to respect?", hint: "Optional and private. Skip if you'd rather not say.",
-      body: <div className="checks">{(catalog?.conditions ?? []).map((c) => <button key={c.id} className={`check ${((d.conditions as string[]) ?? []).includes(c.id) ? "on" : ""}`} onClick={() => toggle("conditions", c.id)}>{c.label}</button>)}</div> },
-    { key: "meds", required: false, bg: "bg-warm", q: "Any medications?", hint: "Only if you'd like us to watch for food interactions. Optional.",
-      body: <div className="checks">{(catalog?.medications ?? []).map((m) => <button key={m} className={`check ${((d.medications as string[]) ?? []).includes(m) ? "on" : ""}`} onClick={() => toggle("medications", m)}>{m}</button>)}</div> },
-    { key: "pref", required: false, bg: "bg-sun", q: "Taste & texture",
+    { key: "allergies", required: false, bg: "bg-leaf", q: "Any allergies or intolerances?", hint: "Important for safety. Type any — search or add your own. Skip if none.",
+      body: <SearchMulti options={catalog?.allergies ?? []} selected={(d.allergies as string[]) ?? []} onToggle={(v) => toggle("allergies", v)} placeholder="search / type an allergy…" /> },
+    { key: "conditions", required: false, bg: "bg-spice", q: "Any health conditions to respect?", hint: "Optional and private — type ANY condition in your own words. Selecting one is not a diagnosis.",
+      body: <SearchMulti options={catalog?.conditionOptions ?? []} selected={(d.conditions as string[]) ?? []} onToggle={(v) => toggle("conditions", v)} placeholder="e.g. hypothyroidism, celiac…" /> },
+    { key: "meds", required: false, bg: "bg-warm", q: "Any medications?", hint: "Only if you'd like us to watch for food interactions. Type any — search or add your own. Optional.",
+      body: <SearchMulti options={catalog?.medicationOptions ?? catalog?.medications ?? []} selected={(d.medications as string[]) ?? []} onToggle={(v) => toggle("medications", v)} placeholder="search / type a medication…" /> },
+    { key: "lifestyle", required: false, bg: "bg-sun", q: "Tell us about your day", hint: "So meals fit your real routine — not everyone cooks at home at fixed times.",
+      body: <>
+        <div className="ob-sub">You are a…</div>
+        <div className="checks">{(catalog?.lifestyleRoles ?? ["Working professional", "Student", "Homemaker", "Retired", "Other"]).map((r) => <button key={r} className={`check ${life.role === r ? "on" : ""}`} onClick={() => setLife("role", r)}>{r}</button>)}</div>
+        <div className="ob-sub" style={{ marginTop: 12 }}>You live…</div>
+        <div className="checks">{["With parents/family", "With spouse/kids", "Alone", "Shared / PG / hostel"].map((v) => <button key={v} className={`check ${life.livesWith === v ? "on" : ""}`} onClick={() => setLife("livesWith", v)}>{v}</button>)}</div>
+        <div className="ob-sub" style={{ marginTop: 12 }}>Does work/college provide food?</div>
+        <div className="checks">{["Yes, cafeteria/canteen", "Sometimes", "No, I arrange my own"].map((v) => <button key={v} className={`check ${life.workplaceFood === v ? "on" : ""}`} onClick={() => setLife("workplaceFood", v)}>{v}</button>)}</div>
+        <div className="ob-sub" style={{ marginTop: 12 }}>Time you have to cook</div>
+        <div className="checks">{["Under 15 min", "15–30 min", "30–60 min", "I don't cook"].map((v) => <button key={v} className={`check ${life.cooking === v ? "on" : ""}`} onClick={() => setLife("cooking", v)}>{v}</button>)}</div>
+        <div className="ob-sub" style={{ marginTop: 12 }}>How active is your day?</div>
+        <div className="checks">{["Mostly sitting", "Moderately active", "On my feet a lot"].map((v) => <button key={v} className={`check ${life.activity === v ? "on" : ""}`} onClick={() => setLife("activity", v)}>{v}</button>)}</div>
+        <div className="ob-sub" style={{ marginTop: 12 }}>Cooking for how many?</div>
+        <div className="checks">{["Just me", "2", "3–4", "5+"].map((v) => <button key={v} className={`check ${life.servings === v ? "on" : ""}`} onClick={() => setLife("servings", v)}>{v}</button>)}</div>
+      </> },
+    { key: "disliked", required: false, bg: "bg-spice", q: "Anything you'd rather avoid?", hint: "Ingredients or dishes you dislike — type any. We'll keep them off your plate.",
+      body: <SearchMulti options={[]} selected={(d.disliked as string[]) ?? []} onToggle={(v) => toggle("disliked", v)} placeholder="e.g. bitter gourd, mushrooms…" /> },
+    { key: "goals", required: false, bg: "bg-leaf", q: "What do you want help with?", hint: "Pick any — we'll shape suggestions around these.",
+      body: <div className="checks">{(catalog?.goalOptions ?? []).map((g) => <button key={g} className={`check ${((d.goals as string[]) ?? []).includes(g) ? "on" : ""}`} onClick={() => toggle("goals", g)}>{g}</button>)}</div> },
+    { key: "pref", required: false, bg: "bg-leaf", q: "Taste & texture",
       body: <>
         <div className="ob-sub">Spice</div>
         <div className="checks">{SPICE.map((s) => <button key={s} className={`check ${d.spice_tolerance === s ? "on" : ""}`} onClick={() => set({ spice_tolerance: s })}>{s}</button>)}</div>
@@ -466,7 +564,13 @@ function SearchMulti({ options, selected, onToggle, placeholder }: { options: st
   return (
     <>
       <input className="ob-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder={placeholder}
-        onKeyDown={(e) => { if (e.key === "Enter" && canAdd) { e.preventDefault(); onToggle(q.trim()); setQ(""); } }} />
+        onKeyDown={(e) => {
+          if (e.key !== "Enter") return;
+          e.preventDefault();
+          const top = filtered.find((o) => !selected.includes(o));
+          if (top) { onToggle(top); setQ(""); }
+          else if (canAdd) { onToggle(q.trim()); setQ(""); }
+        }} />
       {selected.length > 0 && <div className="checks" style={{ marginTop: 8 }}>{selected.map((s) => <button key={s} className="check on" onClick={() => onToggle(s)}>{s} ✕</button>)}</div>}
       <div className="checks" style={{ marginTop: 8 }}>
         {canAdd && <button className="check" onClick={() => { onToggle(q.trim()); setQ(""); }}>+ Add “{q.trim()}”</button>}
@@ -476,16 +580,18 @@ function SearchMulti({ options, selected, onToggle, placeholder }: { options: st
   );
 }
 
-// ---------------- profile editor ----------------
-function ProfileEditor({ catalog, profile, onClose, onSave }: { catalog: Catalog; profile: Profile; onClose: () => void; onSave: (p: Partial<Profile>) => Promise<void> }) {
-  const [d, setD] = useState<Partial<Profile>>({ ...profile });
+// ---------------- profile page (dedicated full-screen) ----------------
+function ProfilePage({ catalog, profile, onBack, onSave, onSignOut }: { catalog: Catalog; profile: Profile; onBack: () => void; onSave: (p: Partial<Profile>) => Promise<void>; onSignOut: () => void }) {
+  const [d, setD] = useState<Partial<Profile>>({ ...profile, lifestyle: profile.lifestyle || {} });
   const [ageStr, setAgeStr] = useState(profile.age != null ? String(profile.age) : "");
   const [dishInput, setDishInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const set = (patch: Partial<Profile>) => setD((x) => ({ ...x, ...patch }));
+  const setLife = (k: string, v: any) => setD((x) => ({ ...x, lifestyle: { ...(x.lifestyle || {}), [k]: v } }));
   const toggle = (key: keyof Profile, v: string) => { const arr = (d[key] as string[]) ?? []; set({ [key]: arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v] } as Partial<Profile>); };
   const cuisineList = catalog.cuisineOptions?.length ? catalog.cuisineOptions : catalog.cuisines;
+  const life = (d.lifestyle || {}) as Record<string, any>;
 
   async function save() {
     setBusy(true); setMsg("");
@@ -495,6 +601,7 @@ function ProfileEditor({ catalog, profile, onClose, onSave }: { catalog: Catalog
         dietary_pattern: d.dietary_pattern, cuisines: d.cuisines, region: d.region,
         loved_dishes: d.loved_dishes, allergies: d.allergies, conditions: d.conditions,
         medications: d.medications, spice_tolerance: d.spice_tolerance, texture_max: d.texture_max,
+        lifestyle: d.lifestyle, goals: d.goals,
         emergency_name: d.emergency_name, emergency_phone: d.emergency_phone,
       });
       setMsg("Saved ✓");
@@ -503,58 +610,124 @@ function ProfileEditor({ catalog, profile, onClose, onSave }: { catalog: Catalog
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal wide" role="dialog" aria-label="My profile" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-head"><b>⚙ My profile</b><button className="signout" onClick={onClose}>close</button></div>
-        <div className="brow">
-          <label>Name<input value={d.preferred_name ?? ""} onChange={(e) => set({ preferred_name: e.target.value })} /></label>
-          <label>Age<input inputMode="numeric" value={ageStr} onChange={(e) => { const v = e.target.value; if (v === "" || /^\d{1,3}$/.test(v)) setAgeStr(v); }} placeholder="e.g. 68" /></label>
-          <label>Home region<input list="pe-regions" value={d.region ?? ""} onChange={(e) => set({ region: e.target.value })} /><datalist id="pe-regions">{catalog.regions.map((r) => <option key={r} value={r} />)}</datalist></label>
-        </div>
-        <div className="bfield"><span>Cuisines you love</span><SearchMulti options={cuisineList} selected={(d.cuisines as string[]) ?? []} onToggle={(v) => toggle("cuisines", v)} placeholder="search / add…" /></div>
-        <div className="bfield"><span>Favourite dishes</span>
-          <div className="dishadd"><input value={dishInput} onChange={(e) => setDishInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && dishInput.trim()) { e.preventDefault(); toggle("loved_dishes", dishInput.trim()); setDishInput(""); } }} placeholder="type any dish" /><button type="button" className="run ghost" onClick={() => { if (dishInput.trim()) { toggle("loved_dishes", dishInput.trim()); setDishInput(""); } }}>Add</button></div>
-          <div className="checks" style={{ marginTop: 8 }}>{((d.loved_dishes as string[]) ?? []).map((f) => <button key={f} className="check on" onClick={() => toggle("loved_dishes", f)}>♥ {f} ✕</button>)}</div>
-        </div>
-        <div className="bfield"><span>Allergies</span><div className="checks">{catalog.allergies.map((a) => <button key={a} className={`check ${((d.allergies as string[]) ?? []).includes(a) ? "on" : ""}`} onClick={() => toggle("allergies", a)}>{a}</button>)}</div></div>
-        <div className="bfield"><span>Health conditions</span><div className="checks">{catalog.conditions.map((c) => <button key={c.id} className={`check ${((d.conditions as string[]) ?? []).includes(c.id) ? "on" : ""}`} onClick={() => toggle("conditions", c.id)}>{c.label}</button>)}</div></div>
-        <div className="bfield"><span>Medications</span><div className="checks">{catalog.medications.map((m) => <button key={m} className={`check ${((d.medications as string[]) ?? []).includes(m) ? "on" : ""}`} onClick={() => toggle("medications", m)}>{m}</button>)}</div></div>
-        <div className="brow">
-          <label>Emergency contact name<input value={d.emergency_name ?? ""} onChange={(e) => set({ emergency_name: e.target.value })} /></label>
-          <label>Emergency phone<input value={d.emergency_phone ?? ""} onChange={(e) => set({ emergency_phone: e.target.value.replace(/[^\d+]/g, "") })} placeholder="+91…" /></label>
-        </div>
-        <div className="cta">
-          <button className="run" disabled={busy} onClick={save}>{busy ? "Saving…" : "Save changes"}</button>
-          {msg && <span className={msg.startsWith("Saved") ? "ok" : "err"} style={{ padding: "0 8px" }}>{msg}</span>}
-        </div>
+    <div className="wrap">
+      <header className="header">
+        <div className="brand"><h1>My profile</h1><p>Everything NaniAI uses to keep your meals safe and familiar. Edit anytime.</p></div>
+        <nav className="topnav">
+          <button className="navbtn" onClick={onBack}>← Back</button>
+          <button className="navbtn ghost" onClick={onSignOut}>Sign out</button>
+        </nav>
+      </header>
+
+      <div className="profile-grid">
+        <section className="pcard">
+          <h3>Personal</h3>
+          <div className="brow">
+            <label>Name<input value={d.preferred_name ?? ""} onChange={(e) => set({ preferred_name: e.target.value })} /></label>
+            <label>Age<input inputMode="numeric" value={ageStr} onChange={(e) => { const v = e.target.value; if (v === "" || /^\d{1,3}$/.test(v)) setAgeStr(v); }} placeholder="e.g. 68" /></label>
+            <label>Home region<input list="pe-regions" value={d.region ?? ""} onChange={(e) => set({ region: e.target.value })} /><datalist id="pe-regions">{catalog.regions.map((r) => <option key={r} value={r} />)}</datalist></label>
+          </div>
+        </section>
+
+        <section className="pcard">
+          <h3>Taste</h3>
+          <div className="bfield"><span>Cuisines you love</span><SearchMulti options={cuisineList} selected={(d.cuisines as string[]) ?? []} onToggle={(v) => toggle("cuisines", v)} placeholder="search / add a cuisine…" /></div>
+          <div className="bfield"><span>Favourite dishes <small>(type any)</small></span>
+            <div className="dishadd"><input value={dishInput} onChange={(e) => setDishInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && dishInput.trim()) { e.preventDefault(); toggle("loved_dishes", dishInput.trim()); setDishInput(""); } }} placeholder="e.g. Hyderabadi biryani" /><button type="button" className="run ghost" onClick={() => { if (dishInput.trim()) { toggle("loved_dishes", dishInput.trim()); setDishInput(""); } }}>Add</button></div>
+            <div className="checks" style={{ marginTop: 8 }}>{((d.loved_dishes as string[]) ?? []).map((f) => <button key={f} className="check on" onClick={() => toggle("loved_dishes", f)}>♥ {f} ✕</button>)}</div>
+          </div>
+          <div className="bfield"><span>Dietary pattern</span><div className="checks">{DIET.map((o) => <button key={o.v} className={`check ${d.dietary_pattern === o.v ? "on" : ""}`} onClick={() => set({ dietary_pattern: o.v })}>{o.l}</button>)}</div></div>
+          <div className="bfield"><span>Spice</span><div className="checks">{SPICE.map((s) => <button key={s} className={`check ${d.spice_tolerance === s ? "on" : ""}`} onClick={() => set({ spice_tolerance: s })}>{s}</button>)}</div></div>
+          <div className="bfield"><span>Chewing / swallowing ease: <b>{d.texture_max ?? 7}</b></span><input type="range" min={0} max={7} value={d.texture_max ?? 7} onChange={(e) => set({ texture_max: +e.target.value })} style={{ width: "100%", accentColor: "var(--saffron)" }} /></div>
+        </section>
+
+        <section className="pcard">
+          <h3>Health <small>(private)</small></h3>
+          <div className="bfield"><span>Allergies &amp; intolerances</span><SearchMulti options={catalog.allergies} selected={(d.allergies as string[]) ?? []} onToggle={(v) => toggle("allergies", v)} placeholder="search / type an allergy…" /></div>
+          <div className="bfield"><span>Health conditions</span><SearchMulti options={catalog.conditionOptions ?? []} selected={(d.conditions as string[]) ?? []} onToggle={(v) => toggle("conditions", v)} placeholder="search / type any condition…" /></div>
+          <div className="bfield"><span>Medications</span><SearchMulti options={catalog.medicationOptions ?? catalog.medications} selected={(d.medications as string[]) ?? []} onToggle={(v) => toggle("medications", v)} placeholder="search / type a medication…" /></div>
+          <div className="disclaimer">Only diabetes, hypertension, kidney disease and swallowing difficulty currently drive automatic safety limits; other entries are saved so the assistant and your clinician can see them. Not a diagnosis.</div>
+        </section>
+
+        <section className="pcard">
+          <h3>Lifestyle &amp; routine</h3>
+          <div className="bfield"><span>You are a…</span><div className="checks">{(catalog.lifestyleRoles ?? []).map((r) => <button key={r} className={`check ${life.role === r ? "on" : ""}`} onClick={() => setLife("role", r)}>{r}</button>)}</div></div>
+          <div className="bfield"><span>Where do you live?</span><div className="checks">{["With parents/family", "With spouse/kids", "Alone", "Shared / PG / hostel"].map((v) => <button key={v} className={`check ${life.livesWith === v ? "on" : ""}`} onClick={() => setLife("livesWith", v)}>{v}</button>)}</div></div>
+          <div className="bfield"><span>Does your workplace/college provide food?</span><div className="checks">{["Yes, cafeteria/canteen", "Sometimes", "No, I arrange my own"].map((v) => <button key={v} className={`check ${life.workplaceFood === v ? "on" : ""}`} onClick={() => setLife("workplaceFood", v)}>{v}</button>)}</div></div>
+          <div className="bfield"><span>Cooking time you usually have</span><div className="checks">{["Under 15 min", "15–30 min", "30–60 min", "I don't cook"].map((v) => <button key={v} className={`check ${life.cooking === v ? "on" : ""}`} onClick={() => setLife("cooking", v)}>{v}</button>)}</div></div>
+          <div className="bfield"><span>A note about your typical day <small>(optional)</small></span><textarea className="ob-input" rows={2} value={life.routine ?? ""} onChange={(e) => setLife("routine", e.target.value)} placeholder="e.g. Long office hours, dinner late, skip breakfast…" /></div>
+        </section>
+
+        <section className="pcard">
+          <h3>Goals</h3>
+          <div className="checks">{(catalog.goalOptions ?? []).map((g) => <button key={g} className={`check ${((d.goals as string[]) ?? []).includes(g) ? "on" : ""}`} onClick={() => toggle("goals", g)}>{g}</button>)}</div>
+        </section>
+
+        <section className="pcard">
+          <h3>Emergency contact</h3>
+          <div className="brow">
+            <label>Name<input value={d.emergency_name ?? ""} onChange={(e) => set({ emergency_name: e.target.value })} placeholder="e.g. Priya (daughter)" /></label>
+            <label>Phone (with country code)<input value={d.emergency_phone ?? ""} onChange={(e) => set({ emergency_phone: e.target.value.replace(/[^\d+]/g, "") })} placeholder="+9198XXXXXXXX" /></label>
+          </div>
+        </section>
+      </div>
+
+      <div className="cta sticky-save">
+        <button className="run" disabled={busy} onClick={save}>{busy ? "Saving…" : "Save changes"}</button>
+        <button className="run ghost" onClick={onBack}>Done</button>
+        {msg && <span className={msg.startsWith("Saved") ? "ok" : "err"} style={{ padding: "0 8px" }}>{msg}</span>}
       </div>
     </div>
   );
 }
 
 // ---------------- emergency ----------------
-const DEFAULT_EMERGENCY_MSG = "Hi, I need your help urgently. Please contact me as soon as you can. If you can, please call me now.";
 function isValidPhone(p: string): boolean { const d = (p || "").replace(/\D/g, ""); return d.length >= 8 && d.length <= 15; }
 
-function EmergencyModal({ profile, onClose, onSave }: { profile: Profile; onClose: () => void; onSave: (p: Partial<Profile>) => Promise<void> }) {
+function EmergencyScreen({ profile, onClose, onSave, onReopen }: { profile: Profile; onClose: () => void; onSave: (p: Partial<Profile>) => Promise<void>; onReopen: () => void }) {
   const hasContact = isValidPhone(profile.emergency_phone ?? "");
   const [editing, setEditing] = useState(!hasContact);
   const [eName, setEName] = useState(profile.emergency_name ?? "");
   const [ePhone, setEPhone] = useState(profile.emergency_phone ?? "");
-  const [msg, setMsg] = useState(DEFAULT_EMERGENCY_MSG);
-  const [opened, setOpened] = useState(false);
   const [busy, setBusy] = useState(false);
   const phoneOk = isValidPhone(ePhone);
-  const waUrl = profile.emergency_phone ? `https://wa.me/${profile.emergency_phone.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}` : "#";
+
+  const HELPLINES = [
+    { n: "112", l: "National emergency (India)" },
+    { n: "108", l: "Ambulance (India)" },
+    { n: "104", l: "Health advice (India)" },
+    { n: "14416", l: "Tele-MANAS mental health (India)" },
+  ];
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" role="dialog" aria-label="Emergency" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-head"><b>🚨 Emergency help</b><button className="signout" onClick={onClose}>close</button></div>
-        <div className="emg-alert">If this is life-threatening, call your local emergency number first — <b>112</b> (all-India) or <b>108</b> (ambulance). This shortcut is <b>not</b> a substitute for emergency services.</div>
+      <div className="modal emg-screen" role="dialog" aria-label="Emergency" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head"><b>🚨 You&rsquo;re not alone</b><button className="signout" onClick={onClose}>close</button></div>
+
+        <div className="emg-alert">If this is life-threatening, call your local emergency number now. Numbers below are for <b>India</b> — if you&rsquo;re elsewhere, use your country&rsquo;s emergency number.</div>
+
+        {hasContact && !editing && (
+          <div className="emg-opened">✓ WhatsApp opened in a new tab for <b>{profile.emergency_name || "your contact"}</b> — press send there to alert them. Opening it doesn&rsquo;t send it automatically.
+            <button className="run ghost" style={{ marginTop: 8 }} onClick={onReopen}>Open WhatsApp again</button>
+          </div>
+        )}
+
+        <div className="breathe">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/breathe.gif" alt="A calming animation guiding you to breathe in deeply, hold, and breathe out" />
+          <p>While help is on the way, breathe with the animation — in… hold… out. You&rsquo;re doing the right thing.</p>
+        </div>
+
+        <div className="helplines">
+          {HELPLINES.map((h) => (
+            <a key={h.n} className="helpline" href={`tel:${h.n}`}><span className="hn">{h.n}</span><span className="hl">{h.l}</span></a>
+          ))}
+        </div>
+
         {editing ? (
           <div className="emg-edit">
-            <label>Trusted contact name<input value={eName} onChange={(e) => setEName(e.target.value)} placeholder="e.g. Priya (daughter)" /></label>
+            <div className="emg-sub">Add a trusted contact so you can reach them in one tap next time:</div>
+            <label>Contact name<input value={eName} onChange={(e) => setEName(e.target.value)} placeholder="e.g. Priya (daughter)" /></label>
             <label>Phone with country code<input value={ePhone} onChange={(e) => setEPhone(e.target.value.replace(/[^\d+]/g, ""))} placeholder="+9198XXXXXXXX" /></label>
             {!phoneOk && ePhone.length > 0 && <div className="emg-err">Enter a valid number with country code (8–15 digits).</div>}
             <div className="cta">
@@ -563,19 +736,24 @@ function EmergencyModal({ profile, onClose, onSave }: { profile: Profile; onClos
             </div>
           </div>
         ) : (
-          <>
-            <div className="emg-contact">Contact: <b>{profile.emergency_name || "your trusted contact"}</b> · {profile.emergency_phone}<button className="signout" onClick={() => setEditing(true)}>edit</button></div>
-            <label className="emg-msglabel">Message (you can edit it)<textarea value={msg} onChange={(e) => setMsg(e.target.value)} rows={3} /></label>
-            <a className="run emg-send" href={waUrl} target="_blank" rel="noreferrer" onClick={() => setOpened(true)}>Open WhatsApp with this message</a>
-            <div className="emg-note">This <b>opens WhatsApp with the message pre-filled</b> — you still press send in WhatsApp. We can&rsquo;t confirm delivery; opening WhatsApp does not mean it was sent.</div>
-            {opened && <div className="emg-opened">WhatsApp was opened in a new tab. Press send there to notify your contact.</div>}
-          </>
+          <button className="signout" style={{ marginTop: 10 }} onClick={() => setEditing(true)}>edit emergency contact</button>
         )}
       </div>
     </div>
   );
 }
 
+// ---------------- hover info tooltip ----------------
+function InfoTip({ text }: { text: string }) {
+  return (
+    <span className="infotip" tabIndex={0} role="button" aria-label="Why these meals were suggested">
+      <span className="infotip-i">i</span>
+      <span className="infotip-pop">{text}</span>
+    </span>
+  );
+}
+
+// ---------------- hover info tooltip end ----------------
 // ---------------- Ask NaniAI chat widget ----------------
 type ChatMsg = { role: "user" | "assistant"; content: string };
 const SUGGESTED = ["What can I eat that's quick and familiar?", "What's a good swap for a dish I can't have?", "What's in Uttapam?", "Give me a light dinner idea"];

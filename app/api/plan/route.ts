@@ -19,14 +19,32 @@ const VALID_CONDITIONS: Condition[] = [
   "dysphagia",
 ];
 
+// Map free-text condition names (what users type) to the enum the deterministic
+// gate has rules for. Unrecognized conditions are kept out of the gate (saved as
+// context elsewhere) — we never invent a safety rule we don't actually have.
+function toConditionEnum(raw: string): Condition | null {
+  const s = raw.toLowerCase();
+  if (VALID_CONDITIONS.includes(raw as Condition)) return raw as Condition;
+  if (/diabet|sugar|\bt2d\b|prediab|gestational/.test(s)) return "type_2_diabetes";
+  if (/hypertens|blood pressure|\bbp\b/.test(s)) return "hypertension";
+  if (/kidney|renal|\bckd\b|dialysis|nephro/.test(s)) return "chronic_kidney_disease";
+  if (/dysphag|swallow/.test(s)) return "dysphagia";
+  return null;
+}
+
 /** Build a safe Persona from untrusted client input (the "Your Kitchen" form). */
 function sanitizePersona(input: any): Persona {
   const clampTexture = (n: any): TextureLevel => {
     const v = Math.round(Number(n));
     return (Math.max(0, Math.min(7, isNaN(v) ? 7 : v)) as TextureLevel);
   };
-  const conditions = Array.isArray(input?.conditions)
-    ? input.conditions.filter((c: any): c is Condition => VALID_CONDITIONS.includes(c))
+  const conditions: Condition[] = Array.isArray(input?.conditions)
+    ? Array.from(new Set<Condition>(
+        input.conditions
+          .filter((c: any) => typeof c === "string")
+          .map((c: string) => toConditionEnum(c))
+          .filter((c: Condition | null): c is Condition => c !== null),
+      ))
     : [];
   const lovedDishIds = Array.isArray(input?.lovedDishIds)
     ? input.lovedDishIds.filter((id: any) => typeof id === "string" && DISHES_BY_ID[id])

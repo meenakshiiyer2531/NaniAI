@@ -28,6 +28,10 @@ interface ProfileLite {
   conditions?: string[];
   allergies?: string[];
   lovedDishIds?: string[];
+  disliked?: string[];
+  dietary_pattern?: string;
+  goals?: string[];
+  lifestyle?: Record<string, any>;
 }
 
 const EMERGENCY_RE =
@@ -112,16 +116,30 @@ export async function POST(req: NextRequest) {
       "You are NaniAI, a warm, concise food & wellness companion. Answer only about meals, ingredients, " +
       "substitutions, cooking, grocery planning, cuisine, and GENERAL nutrition education. " +
       "You must NOT diagnose, prescribe, change medication, or declare any food–drug combination safe — refer those to a clinician. " +
-      "Never override a safety limit. Keep answers friendly and under 120 words. If unsure, say so.";
+      "Never override a safety limit. Keep answers friendly and under 120 words. " +
+      "Respond in PLAIN TEXT ONLY — no markdown, no asterisks, no underscores, no bullet symbols for emphasis. If unsure, say so.";
     const convo = messages.map((m) => `${m.role === "user" ? "User" : "NaniAI"}: ${m.content}`).join("\n");
+    const life = profile?.lifestyle || {};
+    const lifeBits = [life.role, life.livesWith, life.cooking && `cook time ${life.cooking}`, life.stage]
+      .filter(Boolean).join(", ");
     const user =
-      (profile ? `User profile: name ${profile.name ?? "—"}, cuisine ${profile.cuisine ?? "—"}` +
-        `${profile.region ? ` (${profile.region})` : ""}, conditions ${(profile.conditions ?? []).join(", ") || "none"}, ` +
-        `allergies ${(profile.allergies ?? []).join(", ") || "none"}.\n` : "") +
+      (profile ? `User profile: name ${profile.name ?? "—"}, cuisine(s) ${profile.cuisine ?? "—"}` +
+        `${profile.region ? ` (home ${profile.region})` : ""}, diet ${profile.dietary_pattern ?? "—"}, ` +
+        `conditions ${(profile.conditions ?? []).join(", ") || "none"}, allergies ${(profile.allergies ?? []).join(", ") || "none"}, ` +
+        `dislikes ${(profile.disliked ?? []).join(", ") || "none"}, loves ${(profile.lovedDishIds ?? []).join(", ") || "—"}` +
+        `${lifeBits ? `, lifestyle: ${lifeBits}` : ""}${(profile.goals ?? []).length ? `, goals: ${(profile.goals ?? []).join(", ")}` : ""}.\n` +
+        `Respect allergies and dislikes; tailor to their cuisines, lifestyle and cooking time.\n` : "") +
       `Conversation so far:\n${convo}\n\nAnswer the user's latest message.`;
 
     const result = await chat({ system, user, mockText, maxTokens: 220 });
-    return NextResponse.json({ reply: result.text, provider: result.provider, kind: "general" });
+    // Strip markdown emphasis so plain-text bubbles never show stray * or _.
+    const clean = result.text
+      .replace(/\*\*(.*?)\*\*/g, "$1")
+      .replace(/\*(.*?)\*/g, "$1")
+      .replace(/(?<=\S)_(?=\S)/g, "")
+      .replaceAll("*", "")
+      .trim();
+    return NextResponse.json({ reply: clean, provider: result.provider, kind: "general" });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message ?? "chat failed" }, { status: 500 });
   }

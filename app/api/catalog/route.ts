@@ -43,7 +43,32 @@ export async function GET() {
       { id: "chronic_kidney_disease", label: "Kidney disease" },
       { id: "dysphagia", label: "Swallowing difficulty" },
     ],
-    allergies: ["peanut", "nuts", "dairy", "gluten", "fish", "shellfish", "soy", "egg", "sesame"],
+    // Broad, searchable condition suggestions (free text allowed). Only the four
+    // above drive deterministic safety rules today; the rest are saved as context
+    // for the assistant and your clinician — we never invent a rule we don't have.
+    conditionOptions: [
+      "Type 2 diabetes", "Type 1 diabetes", "Prediabetes", "Gestational diabetes",
+      "Hypertension (high blood pressure)", "Kidney disease (CKD)", "Swallowing difficulty (dysphagia)",
+      "High cholesterol", "Heart disease", "Heart failure", "Stroke history",
+      "Celiac disease", "IBS", "IBD / Crohn's", "Ulcerative colitis", "GERD / acid reflux",
+      "Hypothyroidism", "Hyperthyroidism", "PCOS", "Gout", "Anemia",
+      "Osteoporosis", "Fatty liver (NAFLD)", "Lactose intolerance", "Obesity",
+      "Pregnancy", "Breastfeeding", "Cancer (in treatment)", "Dialysis",
+    ],
+    allergies: ["peanut", "nuts", "dairy", "gluten", "fish", "shellfish", "soy", "egg", "sesame", "mustard", "wheat", "lactose"],
     medications: ["metformin", "amlodipine", "warfarin", "insulin", "losartan", "atorvastatin"],
+    medicationOptions: [
+      "metformin", "insulin", "glimepiride", "sitagliptin", "empagliflozin",
+      "amlodipine", "losartan", "telmisartan", "lisinopril", "ramipril", "hydrochlorothiazide",
+      "atorvastatin", "rosuvastatin", "warfarin", "aspirin", "clopidogrel",
+      "levothyroxine", "omeprazole", "pantoprazole", "furosemide", "spironolactone",
+      "allopurinol", "prednisone", "iron supplement", "calcium supplement", "vitamin D",
+    ],
+    lifestyleRoles: ["Working professional", "Student", "Homemaker", "Retired", "Other"],
+    goalOptions: [
+      "Find suitable meals", "Eat more consistently", "Explore new dishes",
+      "Preserve familiar food traditions", "Plan grocery purchases",
+      "Manage time & meal prep", "Understand nutrition", "Fit clinician's diet advice",
+    ],
   });
 }
