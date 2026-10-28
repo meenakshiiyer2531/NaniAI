@@ -251,9 +251,9 @@ async function narrate(
     `Plan: ${planText}.\nSubstitutions: ${subText || "none"}.\n` +
     `Mode: ${mode}.`;
 
-  // Nemotron tiering: the heavy reasoning narrative runs on the reasoning tier
-  // (Ultra); a short "home note" runs on the fast tier (Nano/Super).
-  const detail = await chat({ system, user, mockText, maxTokens: 300, tier: "reasoning" });
+  // Language reasoning flows through the provider-neutral model gateway (real
+  // NVIDIA open model when configured, deterministic mock otherwise).
+  const detail = await chat({ system, user, mockText, maxTokens: 300 });
   return detail;
 }
 

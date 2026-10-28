@@ -2,7 +2,7 @@
   "name": "naniai",
   "version": "0.1.0",
   "private": true,
-  "description": "NaniAI — a culturally-grounded meal & daily-life agent for seniors with health constraints. Qloo taste graph + deterministic clinician safety gate + portable Nemotron/Nebius brain.",
+  "description": "NaniAI — a culturally-grounded meal & daily-life agent for seniors with health constraints. Qloo taste graph + deterministic clinician safety gate + provider-neutral LLM gateway (any OpenAI-compatible NVIDIA open model).",
   "license": "Apache-2.0",
   "scripts": {
     "dev": "next dev",

@@ -130,7 +130,7 @@ export interface NegotiationStep {
   message: string;
 }
 
-export type ModelProvider = "mock" | "anthropic" | "nebius";
+export type ModelProvider = "mock" | "openai";
 
 export interface RunMeta {
   modelProvider: ModelProvider;

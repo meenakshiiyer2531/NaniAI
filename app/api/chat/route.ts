@@ -11,10 +11,10 @@ export const maxDuration = 30;
 //    deterministic guardrails, never by the model, and never with medical
 //    clearance. Emergencies are pointed at local services.
 //  - General food/cooking/nutrition questions are answered from our REAL dish
-//    data in deterministic (keyless) mode, and by the configured LLM (NVIDIA
-//    Nemotron via Nebius) when a key is present — same model gateway.
+//    data in deterministic (keyless) mode, and by the configured LLM (any
+//    OpenAI-compatible NVIDIA open model — NVIDIA's API or Nebius) when set.
 //  - We never claim an LLM ran when it did not: the response carries the real
-//    provider ("mock" | "nebius" | "anthropic").
+//    provider ("mock" | "openai" | "guardrail").
 
 interface ChatTurn {
   role: "user" | "assistant";
@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
         `allergies ${(profile.allergies ?? []).join(", ") || "none"}.\n` : "") +
       `Conversation so far:\n${convo}\n\nAnswer the user's latest message.`;
 
-    const result = await chat({ system, user, mockText, maxTokens: 220, tier: "fast" });
+    const result = await chat({ system, user, mockText, maxTokens: 220 });
     return NextResponse.json({ reply: result.text, provider: result.provider, kind: "general" });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message ?? "chat failed" }, { status: 500 });
