@@ -99,6 +99,30 @@ function timeGreeting(): string {
 }
 const SLOT_EMOJI: Record<string, string> = { breakfast: "🌅", lunch: "☀️", snack: "🫖", dinner: "🌙" };
 const SLOT_TIME: Record<string, string> = { breakfast: "7:00–8:30 am", lunch: "12:30–1:30 pm", snack: "4:00–5:00 pm", dinner: "7:00–8:00 pm" };
+const SLOT_NEXT: Record<string, "breakfast" | "lunch" | "snack" | "dinner"> = { breakfast: "lunch", lunch: "dinner", snack: "dinner", dinner: "breakfast" };
+
+/** Approximate serving size per dish — honest guidance, not a prescription. */
+function portionOf(d: { id: string; tags: string[] }): string {
+  const t = d.tags, id = d.id;
+  if (t.includes("flatbread") || /paratha|thepla|chapati/.test(id)) return "2 pieces";
+  if (/^idli|millet_idli/.test(id)) return "3 pieces";
+  if (id.includes("dosa")) return "1–2";
+  if (id === "uttapam" || id === "appam") return "1–2";
+  if (id === "medu_vada") return "2 pieces";
+  if (t.includes("rice")) return "1 cup cooked";
+  if (t.includes("yogurt")) return "2–3 tbsp";
+  if (t.includes("accompaniment") || t.includes("soup") || t.includes("liquid")) return "1 small bowl";
+  if (t.includes("dessert")) return "small bowl (~½ cup)";
+  return "1 serving";
+}
+/** How to prep a dish ahead of time. */
+function prepTipFor(d: { id: string; tags: string[]; ingredients: string[] }): string {
+  const t = d.tags;
+  if (t.includes("fermented")) return "Soak and grind the batter tonight and leave it to ferment overnight.";
+  if (t.includes("flatbread") || t.includes("wheat")) return "Knead the dough ahead, cover, and rest it so it's ready to roll.";
+  if (t.includes("rice") || t.includes("lentil")) return "Rinse and soak the rice/lentils ahead so the cook is quick.";
+  return "Chop and portion the ingredients ahead to save time.";
+}
 
 export default function Home() {
   const configured = supabaseConfigured();
@@ -207,23 +231,21 @@ export default function Home() {
   const allDishes = useMemo(() => effItems.flatMap((it) => [it.dish, ...(it.side ? [it.side] : [])]), [effItems]);
   const nowSlot = currentSlot();
   const visibleItems = useMemo(() => (showFullDay ? effItems : effItems.filter((it) => it.slot === nowSlot)), [effItems, showFullDay, nowSlot]);
-  const breakfastItem = useMemo(() => effItems.find((it) => it.slot === "breakfast"), [effItems]);
-  const prepTip = useMemo(() => {
-    if (!breakfastItem) return "";
-    const t = breakfastItem.dish.tags;
-    if (t.includes("fermented")) return "Soak and grind the batter tonight, and leave it to ferment overnight.";
-    if (t.includes("lentil") || t.includes("rice")) return "Soak the rice/lentils tonight so the morning cook is quick.";
-    return "Chop and set out what you can tonight to save time in the morning.";
-  }, [breakfastItem]);
-  // At dinner, also buy for tomorrow's breakfast.
+  const nextSlot = SLOT_NEXT[nowSlot];
+  const nextItem = useMemo(() => effItems.find((it) => it.slot === nextSlot), [effItems, nextSlot]);
+  // At dinner, "next" is tomorrow's breakfast.
+  const nextIsTomorrow = nowSlot === "dinner";
   const totals = useMemo(() => (allDishes.length ? dayTotals(allDishes.map((d) => ({ dish: d })) as any) : null), [allDishes]);
   const grocery = useMemo(() => {
     const set = new Set<string>();
     const dishes = showFullDay ? allDishes : visibleItems.flatMap((it) => [it.dish, ...(it.side ? [it.side] : [])]);
     dishes.forEach((d) => d.ingredients.forEach((i) => set.add(i)));
-    if (nowSlot === "dinner" && breakfastItem) breakfastItem.dish.ingredients.forEach((i) => set.add(i)); // prep for tomorrow
+    if (!showFullDay && nextItem) { // include what to buy for the next meal you'll prep
+      nextItem.dish.ingredients.forEach((i) => set.add(i));
+      nextItem.side?.ingredients.forEach((i) => set.add(i));
+    }
     return Array.from(set).sort();
-  }, [allDishes, visibleItems, showFullDay, nowSlot, breakfastItem]);
+  }, [allDishes, visibleItems, showFullDay, nextItem]);
 
   // ---------- gates ----------
   if (!configured) return <ConfigNotice />;
@@ -309,6 +331,7 @@ export default function Home() {
                       <div className="dish">{it.dish.name}{it.side ? <span className="with"> + {it.side.name}</span> : ""} <InfoTip text={mealWhy(it.dish.name, it.receipt, it.side?.name)} /></div>
                       <div className="mchips">
                         <span className="mchip">🍽 {it.dish.cuisine}</span>
+                        <span className="mchip">🍚 {portionOf(it.dish)}{it.side ? ` + ${portionOf(it.side)} ${it.side.name}` : ""}</span>
                         <span className="mchip">⏰ {SLOT_TIME[it.slot]}</span>
                         <span className="mchip">⏱ prep {recipe.prep}</span>
                       </div>
@@ -327,7 +350,9 @@ export default function Home() {
                         <span>{it.dish.nutrition.sodium_mg + (it.side?.nutrition.sodium_mg ?? 0)}mg sodium</span>
                         <span>{it.dish.nutrition.carbs_g + (it.side?.nutrition.carbs_g ?? 0)}g carbs</span>
                       </div>
-                      {it.side && <div className="plate-note">A full plate: <b>{it.dish.name}</b> with <b>{it.side.name}</b> — together within your limits.</div>}
+                      {it.side
+                        ? <div className="plate-note">🍽 <b>Serve:</b> {portionOf(it.dish)} {it.dish.name} + {portionOf(it.side)} {it.side.name} <span className="pn-approx">(approx, per person)</span> — together within your limits.</div>
+                        : <div className="plate-note">🍽 <b>Serve:</b> about {portionOf(it.dish)} of {it.dish.name} <span className="pn-approx">(approx, per person)</span>.</div>}
                       {optCount > 1 && (
                         <>
                           <div className="recipe-h">Choose this meal — {optCount} safe options</div>
@@ -373,13 +398,17 @@ export default function Home() {
             </button>
           </div>
 
-          {!showFullDay && nowSlot === "dinner" && breakfastItem && (
+          {!showFullDay && nextItem && (
             <div className="prep-card">
-              <div className="prep-emoji">🌅</div>
-              <div>
-                <div className="prep-h">Tonight, prep for tomorrow&rsquo;s breakfast</div>
-                <div className="prep-dish"><b>{breakfastItem.dish.name}</b> — {breakfastItem.dish.cuisine} · {buildRecipe(breakfastItem.dish as any).prep}</div>
-                <div className="prep-tip">{prepTip}</div>
+              <div className="prep-emoji">{SLOT_EMOJI[nextSlot]}</div>
+              <div style={{ flex: 1 }}>
+                <div className="prep-h">Prepare next — {nextIsTomorrow ? "tomorrow's" : "your"} {nextSlot}</div>
+                <div className="prep-dish"><b>{nextItem.dish.name}</b>{nextItem.side ? ` + ${nextItem.side.name}` : ""} · {nextItem.dish.cuisine} · {buildRecipe(nextItem.dish as any).prep}</div>
+                <ul className="prep-steps">
+                  <li>Set aside: {nextItem.dish.ingredients.join(", ")}{nextItem.side ? `, ${nextItem.side.ingredients.join(", ")}` : ""}.</li>
+                  <li>{prepTipFor(nextItem.dish)}</li>
+                  <li>Keep anything perishable (curd, cooked dal, cut vegetables) <b>covered in the fridge</b> — never left out overnight.</li>
+                </ul>
               </div>
             </div>
           )}
@@ -396,7 +425,7 @@ export default function Home() {
               <div className="ok">✓ every meal is within the limits set for your health.</div>
             </div>
             <div className="panel">
-              <h3>🛒 Grocery list <InfoTip text={nowSlot === "dinner" ? "Ingredients for your shown meals plus tomorrow's breakfast, so you can prep ahead tonight." : "Ingredients for your shown meals, de-duplicated into one shopping list."} /></h3>
+              <h3>🛒 Grocery list <InfoTip text={"Ingredients for the meal you're having now plus what you'll prep for your next meal, merged into one shopping list."} /></h3>
               <div className="grocery">{grocery.map((g) => <span key={g} className="gitem">{g}</span>)}</div>
             </div>
           </div>
