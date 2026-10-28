@@ -43,18 +43,19 @@ const isSideDish = (d: Dish) => d.tags.includes("accompaniment") || isThin(d);
 /** A "main" is a substantial dish — not a dessert, not a side/broth. */
 const isMainDish = (d: Dish) => !isDessert(d) && !isSideDish(d);
 
-/** Would main + side together still respect every per-meal cap + texture? */
-function plateFits(main: Dish, side: Dish, ctx: Ctx): boolean {
+/** Would main + all chosen sides together still respect every per-meal cap + texture? */
+function plateFits(main: Dish, sides: Dish[], ctx: Ctx): boolean {
   const c = ctx.constraints;
-  const sugar = main.nutrition.sugar_g + side.nutrition.sugar_g;
-  const sodium = main.nutrition.sodium_mg + side.nutrition.sodium_mg;
-  const carbs = main.nutrition.carbs_g + side.nutrition.carbs_g;
-  const potassium = (main.nutrition.potassium_mg ?? 0) + (side.nutrition.potassium_mg ?? 0);
+  const all = [main, ...sides];
+  const sugar = all.reduce((s, d) => s + d.nutrition.sugar_g, 0);
+  const sodium = all.reduce((s, d) => s + d.nutrition.sodium_mg, 0);
+  const carbs = all.reduce((s, d) => s + d.nutrition.carbs_g, 0);
+  const potassium = all.reduce((s, d) => s + (d.nutrition.potassium_mg ?? 0), 0);
   if (sugar > c.maxSugarPerMeal_g) return false;
   if (sodium > c.maxSodiumPerMeal_mg) return false;
   if (carbs > c.maxCarbsPerMeal_g) return false;
   if (c.maxPotassiumPerMeal_mg != null && potassium > c.maxPotassiumPerMeal_mg) return false;
-  if (side.texture > ctx.persona.textureMax) return false;
+  if (sides.some((s) => s.texture > ctx.persona.textureMax)) return false;
   return true;
 }
 
@@ -105,17 +106,21 @@ function pickForSlots(
       receipt: aff?.evidence ?? [],
     };
 
-    // Lunch & dinner: add a complementary side so it reads as a full plate —
-    // only if the combined plate still fits every safety cap.
-    if (slot === "lunch" || slot === "dinner") {
+    // Build a full plate (thali): add complementary accompaniments one at a time,
+    // keeping the WHOLE plate within every safety cap. Snacks stay single.
+    if (slot !== "snack") {
+      const sides: Dish[] = [];
       const sideCandidates = compliantPool
         .filter((d) => d.id !== dish.id && !used.has(d.id) && isSideDish(d))
         .sort(rank);
-      const side = sideCandidates.find((s) => plateFits(dish, s, ctx));
-      if (side) {
-        item.side = side;
-        used.add(side.id);
+      for (const cand of sideCandidates) {
+        if (sides.length >= 3) break;
+        if (plateFits(dish, [...sides, cand], ctx)) {
+          sides.push(cand);
+          used.add(cand.id);
+        }
       }
+      if (sides.length) item.sides = sides;
     }
 
     if (mode === "grounded") {

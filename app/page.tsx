@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { buildRecipe } from "@/lib/recipes";
 import { dayTotals } from "@/lib/nutrition";
 import { supabaseBrowser, supabaseConfigured, type Profile } from "@/lib/supabase/client";
+import { slotForHour, nextSlotFor, scalePortion, readSchedule, DEFAULT_SCHEDULE, type MealSchedule, type Slot } from "@/lib/schedule";
 
 // ---------- shapes mirroring the API ----------
 type Dish = {
@@ -12,7 +13,7 @@ type Dish = {
   nutrition: { kcal: number; sugar_g: number; sodium_mg: number; carbs_g: number; potassium_mg?: number };
 };
 type Alt = { dish: Dish; familiarity: number; receipt: string[] };
-type PlanItem = { slot: string; dish: Dish; side?: Dish; familiarity: number; receipt: string[]; alternatives?: Alt[] };
+type PlanItem = { slot: string; dish: Dish; sides?: Dish[]; familiarity: number; receipt: string[]; alternatives?: Alt[] };
 type PlanResponse = {
   plan: { items: PlanItem[]; avgFamiliarity: number; violationCount: number };
   substitutions: { fromDishId: string; toDishId: string; tradeoff: string }[];
@@ -43,6 +44,7 @@ const COND_LABEL: Record<string, string> = {
   chronic_kidney_disease: "kidney disease", dysphagia: "swallowing difficulty",
 };
 const FB_KEY = "naniai.feedback.v1";
+const PREP_KEY = "naniai.prepared.v1"; // "YYYY-MM-DD:slot" -> true
 
 function profileToPersona(p: Profile) {
   return {
@@ -83,12 +85,8 @@ function mealWhy(dishName: string, receipt: string[], side?: string): string {
   return `Why ${dishName}${side ? ` with ${side}` : ""}: ${base}. It also fits within every health limit we track for you.`;
 }
 
-function currentSlot(): "breakfast" | "lunch" | "snack" | "dinner" {
-  const h = new Date().getHours();
-  if (h >= 5 && h < 11) return "breakfast";
-  if (h >= 11 && h < 16) return "lunch";
-  if (h >= 16 && h < 19) return "snack";
-  return "dinner";
+function currentSlot(schedule?: MealSchedule): Slot {
+  return slotForHour(new Date().getHours(), schedule);
 }
 function timeGreeting(): string {
   const h = new Date().getHours();
@@ -98,8 +96,17 @@ function timeGreeting(): string {
   return "Good night";
 }
 const SLOT_EMOJI: Record<string, string> = { breakfast: "🌅", lunch: "☀️", snack: "🫖", dinner: "🌙" };
-const SLOT_TIME: Record<string, string> = { breakfast: "7:00–8:30 am", lunch: "12:30–1:30 pm", snack: "4:00–5:00 pm", dinner: "7:00–8:00 pm" };
-const SLOT_NEXT: Record<string, "breakfast" | "lunch" | "snack" | "dinner"> = { breakfast: "lunch", lunch: "dinner", snack: "dinner", dinner: "breakfast" };
+function fmtHour(h: number): string {
+  const hr = ((Math.round(h) % 24) + 24) % 24;
+  const ap = hr < 12 ? "am" : "pm";
+  const h12 = hr % 12 === 0 ? 12 : hr % 12;
+  return `${h12}:00 ${ap}`;
+}
+/** Human time-window label for a slot, from the user's schedule. */
+function slotTime(slot: Slot, s: MealSchedule): string {
+  const nextStart: Record<Slot, number> = { breakfast: s.lunch, lunch: s.snack, snack: s.dinner, dinner: s.breakfast };
+  return `${fmtHour((s as any)[slot])}–${fmtHour(nextStart[slot])}`;
+}
 
 /** Approximate serving size per dish — honest guidance, not a prescription. */
 function portionOf(d: { id: string; tags: string[] }): string {
@@ -143,11 +150,14 @@ export default function Home() {
   const [showEmergency, setShowEmergency] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showFullDay, setShowFullDay] = useState(false);
+  const [servings, setServings] = useState(1);
+  const [prepared, setPrepared] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetch("/api/personas").then((r) => r.json()).then((d) => setStatus(d.status)).catch(() => {});
     fetch("/api/catalog").then((r) => r.json()).then(setCatalog).catch(() => {});
     try { const fb = localStorage.getItem(FB_KEY); if (fb) setFeedback(JSON.parse(fb)); } catch {}
+    try { const pr = localStorage.getItem(PREP_KEY); if (pr) setPrepared(JSON.parse(pr)); } catch {}
     if (!supabase) { setUserId(null); return; }
     supabase.auth.getSession().then(({ data: { session } }) => setUserId(session?.user?.id ?? null));
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
@@ -176,6 +186,25 @@ export default function Home() {
     return () => { cancel = true; };
   }, [supabase, userId]);
 
+  // default the serving-size selector from the saved household size
+  useEffect(() => {
+    const raw = (profile?.lifestyle as any)?.servings;
+    if (!raw) return;
+    if (raw === "Just me") setServings(1);
+    else if (raw === "5+") setServings(5);
+    else { const n = parseInt(String(raw).replace(/[^\d]/g, ""), 10); if (Number.isFinite(n) && n > 0) setServings(n); }
+  }, [profile]);
+
+  function markPrepared(slot: string) {
+    const key = `${new Date().toISOString().slice(0, 10)}:${slot}`;
+    setPrepared((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      try { localStorage.setItem(PREP_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }
+  const isPrepared = (slot: string) => !!prepared[`${new Date().toISOString().slice(0, 10)}:${slot}`];
+
   function rate(dishId: string, v: "up" | "down") {
     setFeedback((prev) => {
       const next = { ...prev };
@@ -196,7 +225,7 @@ export default function Home() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "request failed");
       setData(json);
-      setExpanded({ [currentSlot()]: true }); // auto-open the meal for right now
+      setExpanded({ [slotForHour(new Date().getHours(), readSchedule((profile?.lifestyle as any)?.schedule))]: true }); // auto-open the meal for right now
     } catch (e) { setError((e as Error).message); }
     finally { setLoading(false); }
   }
@@ -220,29 +249,30 @@ export default function Home() {
   const effItems: PlanItem[] = useMemo(() => {
     if (!data) return [];
     const items = data.grounded.plan.items.map((it) => {
-      const opts = [it, ...(it.alternatives ?? []).map((a) => ({ ...it, dish: a.dish, side: undefined, familiarity: a.familiarity, receipt: a.receipt }))];
+      const opts = [it, ...(it.alternatives ?? []).map((a) => ({ ...it, dish: a.dish, sides: undefined, familiarity: a.familiarity, receipt: a.receipt }))];
       const idx = (swapIdx[it.slot] ?? 0) % opts.length;
       return opts[idx];
     });
-    const now = currentSlot();
+    const now = slotForHour(new Date().getHours(), readSchedule((profile?.lifestyle as any)?.schedule));
     const ord: Record<string, number> = { breakfast: 0, lunch: 1, snack: 2, dinner: 3 };
     return [...items].sort((a, b) => (a.slot === now ? -1 : b.slot === now ? 1 : (ord[a.slot] ?? 9) - (ord[b.slot] ?? 9)));
-  }, [data, swapIdx]);
-  const allDishes = useMemo(() => effItems.flatMap((it) => [it.dish, ...(it.side ? [it.side] : [])]), [effItems]);
-  const nowSlot = currentSlot();
+  }, [data, swapIdx, profile]);
+  const allDishes = useMemo(() => effItems.flatMap((it) => [it.dish, ...(it.sides ?? [])]), [effItems]);
+  const schedule = useMemo(() => readSchedule((profile?.lifestyle as any)?.schedule), [profile]);
+  const nowSlot = currentSlot(schedule);
   const visibleItems = useMemo(() => (showFullDay ? effItems : effItems.filter((it) => it.slot === nowSlot)), [effItems, showFullDay, nowSlot]);
-  const nextSlot = SLOT_NEXT[nowSlot];
+  const nextSlot = nextSlotFor(nowSlot);
   const nextItem = useMemo(() => effItems.find((it) => it.slot === nextSlot), [effItems, nextSlot]);
   // At dinner, "next" is tomorrow's breakfast.
   const nextIsTomorrow = nowSlot === "dinner";
   const totals = useMemo(() => (allDishes.length ? dayTotals(allDishes.map((d) => ({ dish: d })) as any) : null), [allDishes]);
   const grocery = useMemo(() => {
     const set = new Set<string>();
-    const dishes = showFullDay ? allDishes : visibleItems.flatMap((it) => [it.dish, ...(it.side ? [it.side] : [])]);
+    const dishes = showFullDay ? allDishes : visibleItems.flatMap((it) => [it.dish, ...(it.sides ?? [])]);
     dishes.forEach((d) => d.ingredients.forEach((i) => set.add(i)));
     if (!showFullDay && nextItem) { // include what to buy for the next meal you'll prep
       nextItem.dish.ingredients.forEach((i) => set.add(i));
-      nextItem.side?.ingredients.forEach((i) => set.add(i));
+      (nextItem.sides ?? []).forEach((s) => s.ingredients.forEach((i) => set.add(i)));
     }
     return Array.from(set).sort();
   }, [allDishes, visibleItems, showFullDay, nextItem]);
@@ -278,7 +308,7 @@ export default function Home() {
 
       {showEmergency && <EmergencyScreen profile={profile} onClose={() => setShowEmergency(false)} onSave={saveProfile} onReopen={openEmergency} />}
 
-      <div className="greeting">{timeGreeting()}, <b>{profile.preferred_name || "friend"}</b> {avatarEmoji(profile)} — it&rsquo;s <b>{currentSlot()}</b> time ({SLOT_TIME[currentSlot()]}). Let&rsquo;s plan meals that feel like home and keep you well.</div>
+      <div className="greeting">{timeGreeting()}, <b>{profile.preferred_name || "friend"}</b> {avatarEmoji(profile)} — it&rsquo;s <b>{nowSlot}</b> time ({slotTime(nowSlot, schedule)}). Let&rsquo;s plan meals that feel like home and keep you well.</div>
 
       <div className="cta">
         <button className="run" onClick={() => { setDay(0); run(0); }} disabled={loading}>{loading ? "Planning…" : "Plan a day"}</button>
@@ -291,9 +321,9 @@ export default function Home() {
       {!data && !loading && (
         <div className="home-cards">
           <button className="hcard primary" onClick={() => { setDay(0); run(0); }}>
-            <div className="hc-emoji">{SLOT_EMOJI[currentSlot()]}</div>
+            <div className="hc-emoji">{SLOT_EMOJI[nowSlot]}</div>
             <div className="hc-title">Plan today&rsquo;s meals</div>
-            <div className="hc-sub">It&rsquo;s {currentSlot()} time — get a safe, familiar {currentSlot()} plus the rest of your day.</div>
+            <div className="hc-sub">It&rsquo;s {nowSlot} time — get a safe, familiar {nowSlot} plus the rest of your day.</div>
           </button>
           <button className="hcard" onClick={() => setShowProfile(true)}>
             <div className="hc-emoji">⚙️</div>
@@ -316,23 +346,31 @@ export default function Home() {
       {data && totals && (
         <>
           <div className="section-label">{showFullDay ? "Your full day" : `Right now — your ${nowSlot}`} — tap a meal for recipe, video &amp; options <InfoTip text={"Chosen to match the cuisines and dishes you enjoy, then checked against your health limits."} /></div>
+          <div className="servings-row">
+            <span>Cooking for</span>
+            <div className="seg">
+              {[1, 2, 3, 4, 6].map((n) => (
+                <button key={n} className={servings === n ? "on" : ""} onClick={() => setServings(n)}>{n === 6 ? "6+" : n}</button>
+              ))}
+            </div>
+            <span className="servings-note">{servings === 1 ? "just you" : `${servings} people`} · quantities below scale to this</span>
+          </div>
           <div className="day-grid">
             {visibleItems.map((it) => {
               const recipe = buildRecipe(it.dish as any);
               const isOpen = expanded[it.slot];
               const orig = data.grounded.plan.items.find((o) => o.slot === it.slot)!;
               const optCount = 1 + (orig.alternatives?.length ?? 0);
-              const isNow = it.slot === currentSlot();
+              const isNow = it.slot === nowSlot;
               return (
                 <div className={`meal ${isNow ? "now" : ""}`} key={it.slot}>
                   <div className="meal-top" onClick={() => setExpanded((e) => ({ ...e, [it.slot]: !e[it.slot] }))}>
                     <div>
                       <div className="slot">{SLOT_EMOJI[it.slot]} {it.slot} {isNow && <span className="now-badge">now</span>}</div>
-                      <div className="dish">{it.dish.name}{it.side ? <span className="with"> + {it.side.name}</span> : ""} <InfoTip text={mealWhy(it.dish.name, it.receipt, it.side?.name)} /></div>
+                      <div className="dish">{it.dish.name}{it.sides?.length ? <span className="with"> thali</span> : ""} <InfoTip text={mealWhy(it.dish.name, it.receipt, (it.sides ?? []).map((s) => s.name).join(", "))} /></div>
                       <div className="mchips">
                         <span className="mchip">🍽 {it.dish.cuisine}</span>
-                        <span className="mchip">🍚 {portionOf(it.dish)}{it.side ? ` + ${portionOf(it.side)} ${it.side.name}` : ""}</span>
-                        <span className="mchip">⏰ {SLOT_TIME[it.slot]}</span>
+                        <span className="mchip">⏰ {slotTime(it.slot as Slot, schedule)}</span>
                         <span className="mchip">⏱ prep {recipe.prep}</span>
                       </div>
                     </div>
@@ -342,20 +380,31 @@ export default function Home() {
                     <div className="fam"><span style={{ width: `${it.familiarity}%` }} /></div>
                     <span className="fam-label">familiarity {it.familiarity}</span>
                   </div>
-                  {isOpen && (
+                  {isOpen && (() => {
+                    const plate = [it.dish, ...(it.sides ?? [])];
+                    const sum = (k: "kcal" | "sugar_g" | "sodium_mg" | "carbs_g") => plate.reduce((a, d) => a + ((d.nutrition as any)[k] ?? 0), 0);
+                    return (
                     <div className="meal-detail">
-                      <div className="nut">
-                        <span>{it.dish.nutrition.kcal + (it.side?.nutrition.kcal ?? 0)} kcal</span>
-                        <span>{(it.dish.nutrition.sugar_g + (it.side?.nutrition.sugar_g ?? 0)).toFixed(1)}g sugar</span>
-                        <span>{it.dish.nutrition.sodium_mg + (it.side?.nutrition.sodium_mg ?? 0)}mg sodium</span>
-                        <span>{it.dish.nutrition.carbs_g + (it.side?.nutrition.carbs_g ?? 0)}g carbs</span>
+                      <div className="recipe-h">On your plate — serves {servings}</div>
+                      <div className="plate">
+                        {plate.map((d, i) => (
+                          <div className="plate-row" key={d.id}>
+                            <span className="pr-name">{i === 0 ? "🍛 " : "🥄 "}{d.name}{i === 0 ? " (main)" : ""}</span>
+                            <span className="pr-qty">{scalePortion(portionOf(d), servings)}</span>
+                          </div>
+                        ))}
                       </div>
-                      {it.side
-                        ? <div className="plate-note">🍽 <b>Serve:</b> {portionOf(it.dish)} {it.dish.name} + {portionOf(it.side)} {it.side.name} <span className="pn-approx">(approx, per person)</span> — together within your limits.</div>
-                        : <div className="plate-note">🍽 <b>Serve:</b> about {portionOf(it.dish)} of {it.dish.name} <span className="pn-approx">(approx, per person)</span>.</div>}
+                      <div className="nut">
+                        <span>{sum("kcal")} kcal</span>
+                        <span>{sum("sugar_g").toFixed(1)}g sugar</span>
+                        <span>{sum("sodium_mg")}mg sodium</span>
+                        <span>{sum("carbs_g")}g carbs</span>
+                      </div>
+                      <div className="plate-note">🛡 Every component was checked against your limits; together they stay in a safe range. Quantities are approximate guidance, not a medical prescription.</div>
+
                       {optCount > 1 && (
                         <>
-                          <div className="recipe-h">Choose this meal — {optCount} safe options</div>
+                          <div className="recipe-h">Prefer a different main? <InfoTip text={"Swap the main dish of this plate — your accompaniments stay. All options are safe for you."} /></div>
                           <div className="choices">
                             {[orig, ...(orig.alternatives ?? []).map((a) => ({ ...orig, dish: a.dish, familiarity: a.familiarity, receipt: a.receipt }))].map((opt, oi) => {
                               const chosen = ((swapIdx[it.slot] ?? 0) % optCount) === oi;
@@ -370,8 +419,14 @@ export default function Home() {
                           </div>
                         </>
                       )}
-                      <div className="recipe-h">Recipe</div>
+                      <div className="recipe-h">Recipe — {it.dish.name}</div>
                       <ol className="recipe">{recipe.steps.map((s, i) => <li key={i}>{s}</li>)}</ol>
+                      <div className="recipe-h">Prep ahead ({recipe.prep})</div>
+                      <ul className="prep-steps">
+                        <li>Set aside: {plate.flatMap((d) => d.ingredients).filter((v, i, a) => a.indexOf(v) === i).join(", ")}.</li>
+                        <li>{prepTipFor(it.dish)}</li>
+                        <li>Keep anything perishable covered in the fridge — never left out overnight.</li>
+                      </ul>
                       <div className="recipe-h">Watch how to make it</div>
                       <a className="videocard" href={recipe.youtubeUrl} target="_blank" rel="noreferrer">
                         <div className="vc-thumb"><span className="vc-play">▶</span></div>
@@ -381,12 +436,14 @@ export default function Home() {
                         </div>
                       </a>
                       <div className="fb">
-                        <span className="fb-q">How was {it.dish.name}?</span>
-                        <button className={`fb-btn ${feedback[it.dish.id] === "up" ? "up" : ""}`} onClick={() => rate(it.dish.id, "up")}>👍 Loved it</button>
-                        <button className={`fb-btn ${feedback[it.dish.id] === "down" ? "down" : ""}`} onClick={() => rate(it.dish.id, "down")}>👎 Not for me</button>
+                        <button className={`fb-btn prep-btn ${isPrepared(it.slot) ? "up" : ""}`} onClick={() => markPrepared(it.slot)}>{isPrepared(it.slot) ? "✓ Prepared" : "Mark prepared"}</button>
+                        <span className="fb-q">· How was {it.dish.name}?</span>
+                        <button className={`fb-btn ${feedback[it.dish.id] === "up" ? "up" : ""}`} onClick={() => rate(it.dish.id, "up")}>👍</button>
+                        <button className={`fb-btn ${feedback[it.dish.id] === "down" ? "down" : ""}`} onClick={() => rate(it.dish.id, "down")}>👎</button>
                       </div>
                     </div>
-                  )}
+                    );
+                  })()}
                 </div>
               );
             })}
@@ -403,9 +460,9 @@ export default function Home() {
               <div className="prep-emoji">{SLOT_EMOJI[nextSlot]}</div>
               <div style={{ flex: 1 }}>
                 <div className="prep-h">Prepare next — {nextIsTomorrow ? "tomorrow's" : "your"} {nextSlot}</div>
-                <div className="prep-dish"><b>{nextItem.dish.name}</b>{nextItem.side ? ` + ${nextItem.side.name}` : ""} · {nextItem.dish.cuisine} · {buildRecipe(nextItem.dish as any).prep}</div>
+                <div className="prep-dish"><b>{nextItem.dish.name}</b>{nextItem.sides?.length ? ` + ${nextItem.sides.map((s) => s.name).join(", ")}` : ""} · {nextItem.dish.cuisine} · {buildRecipe(nextItem.dish as any).prep}</div>
                 <ul className="prep-steps">
-                  <li>Set aside: {nextItem.dish.ingredients.join(", ")}{nextItem.side ? `, ${nextItem.side.ingredients.join(", ")}` : ""}.</li>
+                  <li>Set aside: {[nextItem.dish, ...(nextItem.sides ?? [])].flatMap((d) => d.ingredients).filter((v, i, a) => a.indexOf(v) === i).join(", ")}.</li>
                   <li>{prepTipFor(nextItem.dish)}</li>
                   <li>Keep anything perishable (curd, cooked dal, cut vegetables) <b>covered in the fridge</b> — never left out overnight.</li>
                 </ul>
@@ -442,8 +499,8 @@ export default function Home() {
               <h3>⏰ Suggested times today</h3>
               <div className="timerows">
                 {(["breakfast", "lunch", "snack", "dinner"] as const).map((s) => (
-                  <div className={`timerow ${s === currentSlot() ? "now" : ""}`} key={s}>
-                    <span>{SLOT_EMOJI[s]} {s}</span><span className="tt">{SLOT_TIME[s]}</span>
+                  <div className={`timerow ${s === nowSlot ? "now" : ""}`} key={s}>
+                    <span>{SLOT_EMOJI[s]} {s}</span><span className="tt">{slotTime(s, schedule)}</span>
                   </div>
                 ))}
               </div>
@@ -744,6 +801,16 @@ function ProfilePage({ catalog, profile, onBack, onSave, onSignOut }: { catalog:
           <div className="bfield"><span>Where do you live?</span><div className="checks">{["With parents/family", "With spouse/kids", "Alone", "Shared / PG / hostel"].map((v) => <button key={v} className={`check ${life.livesWith === v ? "on" : ""}`} onClick={() => setLife("livesWith", v)}>{v}</button>)}</div></div>
           <div className="bfield"><span>Does your workplace/college provide food?</span><div className="checks">{["Yes, cafeteria/canteen", "Sometimes", "No, I arrange my own"].map((v) => <button key={v} className={`check ${life.workplaceFood === v ? "on" : ""}`} onClick={() => setLife("workplaceFood", v)}>{v}</button>)}</div></div>
           <div className="bfield"><span>Cooking time you usually have</span><div className="checks">{["Under 15 min", "15–30 min", "30–60 min", "I don't cook"].map((v) => <button key={v} className={`check ${life.cooking === v ? "on" : ""}`} onClick={() => setLife("cooking", v)}>{v}</button>)}</div></div>
+          <div className="bfield"><span>Your meal times <small>(0–23h; drives what the dashboard shows now)</small></span>
+            <div className="sched-grid">
+              {(["breakfast", "lunch", "snack", "dinner"] as const).map((s) => (
+                <label key={s} className="sched-cell">{SLOT_EMOJI[s]} {s}
+                  <input type="number" min={0} max={23} value={(readSchedule(life.schedule) as any)[s]}
+                    onChange={(e) => { const h = Math.max(0, Math.min(23, parseInt(e.target.value, 10) || 0)); setLife("schedule", { ...readSchedule(life.schedule), [s]: h }); }} />
+                </label>
+              ))}
+            </div>
+          </div>
           <div className="bfield"><span>A note about your typical day <small>(optional)</small></span><textarea className="ob-input" rows={2} value={life.routine ?? ""} onChange={(e) => setLife("routine", e.target.value)} placeholder="e.g. Long office hours, dinner late, skip breakfast…" /></div>
         </section>
 

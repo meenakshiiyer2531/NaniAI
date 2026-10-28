@@ -115,11 +115,11 @@ export interface PlanItem {
   dish: Dish;
   familiarity: number;
   receipt: string[]; // Qloo evidence for this pick
-  /** A complementary side that makes the slot a fuller plate (lunch/dinner),
-   *  only attached when the combined plate still fits the safety caps. */
-  side?: Dish;
+  /** Complementary accompaniments that make the slot a full plate (thali-style);
+   *  only added while the combined plate still fits the safety caps. */
+  sides?: Dish[];
   substitutedFor?: Substitution;
-  /** Next-best safe, culturally-close options for this slot (interactive swap). */
+  /** Alternative MAIN dishes for this slot (swap the main). */
   alternatives?: { dish: Dish; familiarity: number; receipt: string[] }[];
 }
 

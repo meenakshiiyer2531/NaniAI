@@ -9,7 +9,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "eval": "tsx lib/eval/run.ts"
+    "eval": "tsx lib/eval/run.ts",
+    "test:schedule": "tsx lib/eval/schedule-test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
