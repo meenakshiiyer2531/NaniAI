@@ -4,7 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "NaniAI — meals that respect your health and your culture",
   description:
-    "A culturally-grounded meal agent for seniors with health constraints. Qloo taste graph + a deterministic clinical-safety gate.",
+    "A personalized food & wellness companion. Qloo taste graph + a deterministic clinical-safety gate + a real NVIDIA open model.",
 };
 
 export default function RootLayout({
@@ -14,7 +14,16 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..600&family=Hanken+Grotesk:wght@400;500;600;700&display=swap"
+          rel="stylesheet"
+        />
+      </head>
       <body>{children}</body>
     </html>
   );
 }
+
