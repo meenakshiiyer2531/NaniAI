@@ -352,17 +352,17 @@ export default function Home() {
             </div>
           </div>
 
-          {/* ---------- reasoning + safety ---------- */}
+          {/* ---------- friendly explanation + safety ---------- */}
           <div className="panels">
             <div className="panel">
-              <h3>How the agents reasoned</h3>
-              {data.grounded.negotiation.map((s, i) => (
-                <div className="step" key={i}><div className={`who ${s.agent}`}>{s.agent}</div><div>{s.message}</div></div>
-              ))}
+              <h3>🍽 Why these meals</h3>
+              <p className="explain">Here&rsquo;s a day of meals tailored to your tastes and dietary needs — chosen to feel
+                familiar while staying within every limit that matters for your health. Tap any meal above for
+                the recipe, a video, and other safe options you can swap in.</p>
             </div>
             <div className="panel">
-              <h3>🛡 Clinician gate — blocked as unsafe</h3>
-              {data.rejected.length === 0 && <div className="rej">Nothing blocked — all dishes were within limits.</div>}
+              <h3>🛡 Kept out for your safety</h3>
+              {data.rejected.length === 0 && <div className="rej">Nothing was left out — everything fits your needs.</div>}
               {data.rejected.map((r) => (
                 <div className="rej" key={r.id}>
                   <div className="n">{r.name}{r.loved && <span className="loved">♥ a favorite</span>}</div>
@@ -380,10 +380,8 @@ export default function Home() {
           </div>
 
           <div className="foot">
-            Brain: <b>{data.grounded.meta.modelProvider}</b> ({data.grounded.meta.modelName}) · {data.grounded.meta.latencyMs}ms ·
-            cost {data.grounded.meta.estCostUsd === null ? "n/a" : `$${data.grounded.meta.estCostUsd.toFixed(5)}`} ·
-            Qloo: <b>{data.grounded.meta.qlooLive ? "live taste graph" : "deterministic mock"}</b>.
-            Medical limits are enforced by deterministic code, never by the model. Not medical advice.
+            Your meals stay within the limits that matter for your health, enforced by deterministic safety code.
+            This is a wellness companion, not medical advice — always consult your clinician.
           </div>
         </>
       )}
@@ -394,7 +392,7 @@ export default function Home() {
 // ---------------- profile builder ----------------
 function ProfileBuilder({ catalog, onSave, onCancel }: { catalog: Catalog; onSave: (p: CustomProfile) => void; onCancel: () => void }) {
   const [name, setName] = useState("");
-  const [age, setAge] = useState(65);
+  const [age, setAge] = useState<string>("65"); // string so deleting leaves it empty (no forced 0)
   const [cuisine, setCuisine] = useState(catalog.cuisines[0] ?? "South Indian");
   const [region, setRegion] = useState("");
   const [conditions, setConditions] = useState<string[]>([]);
@@ -412,7 +410,7 @@ function ProfileBuilder({ catalog, onSave, onCancel }: { catalog: Catalog; onSav
     <div className="builder">
       <div className="brow">
         <label>Name<input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Amma" /></label>
-        <label>Age<input type="number" value={age} onChange={(e) => setAge(+e.target.value)} /></label>
+        <label>Age<input type="text" inputMode="numeric" value={age} onChange={(e) => { const v = e.target.value; if (v === "" || /^\d{1,3}$/.test(v)) setAge(v); }} placeholder="e.g. 65" /></label>
         <label>Cuisine<select value={cuisine} onChange={(e) => { setCuisine(e.target.value); setLoved([]); }}>{catalog.cuisines.map((c) => <option key={c}>{c}</option>)}</select></label>
         <label>Region<select value={region} onChange={(e) => setRegion(e.target.value)}>{catalog.regions.map((r) => <option key={r} value={r}>{r || "— any —"}</option>)}</select></label>
       </div>
@@ -438,7 +436,7 @@ function ProfileBuilder({ catalog, onSave, onCancel }: { catalog: Catalog; onSav
 
       <div className="cta">
         <button className="run" disabled={!name} onClick={() => onSave({
-          id: `c_${Date.now()}`, name, age, cuisine, region: region || undefined,
+          id: `c_${Date.now()}`, name, age: Math.max(1, Math.min(120, parseInt(age, 10) || 30)), cuisine, region: region || undefined,
           conditions, medications, textureMax, allergies, lovedDishIds: loved,
         })}>Save &amp; use profile</button>
         <button className="run ghost" onClick={onCancel}>Cancel</button>
