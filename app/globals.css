@@ -1744,3 +1744,8 @@ button:focus-visible, input:focus-visible, a:focus-visible, .infotip:focus-visib
 
 .prep-btn { border-color: var(--teal) !important; }
 .prep-btn.up { background: var(--teal-soft) !important; color: var(--teal) !important; }
+
+/* ===== v12: recipe link + detail groups ===== */
+.recipe-link { display: inline-block; margin: 2px 0 10px; text-decoration: none; }
+.rc-group { margin-bottom: 12px; }
+.rc-group-h { font-size: 13.5px; font-weight: 600; color: var(--text); margin-bottom: 6px; display: flex; justify-content: space-between; gap: 10px; }

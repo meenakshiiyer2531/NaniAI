@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { buildRecipe } from "@/lib/recipes";
+import Link from "next/link";
+import { buildRecipe, portionOf, prepTipFor } from "@/lib/recipes";
 import { dayTotals } from "@/lib/nutrition";
 import { supabaseBrowser, supabaseConfigured, type Profile } from "@/lib/supabase/client";
 import { slotForHour, nextSlotFor, scalePortion, readSchedule, DEFAULT_SCHEDULE, type MealSchedule, type Slot } from "@/lib/schedule";
@@ -44,7 +45,6 @@ const COND_LABEL: Record<string, string> = {
   chronic_kidney_disease: "kidney disease", dysphagia: "swallowing difficulty",
 };
 const FB_KEY = "naniai.feedback.v1";
-const PREP_KEY = "naniai.prepared.v1"; // "YYYY-MM-DD:slot" -> true
 
 function profileToPersona(p: Profile) {
   return {
@@ -108,29 +108,6 @@ function slotTime(slot: Slot, s: MealSchedule): string {
   return `${fmtHour((s as any)[slot])}–${fmtHour(nextStart[slot])}`;
 }
 
-/** Approximate serving size per dish — honest guidance, not a prescription. */
-function portionOf(d: { id: string; tags: string[] }): string {
-  const t = d.tags, id = d.id;
-  if (t.includes("flatbread") || /paratha|thepla|chapati/.test(id)) return "2 pieces";
-  if (/^idli|millet_idli/.test(id)) return "3 pieces";
-  if (id.includes("dosa")) return "1–2";
-  if (id === "uttapam" || id === "appam") return "1–2";
-  if (id === "medu_vada") return "2 pieces";
-  if (t.includes("rice")) return "1 cup cooked";
-  if (t.includes("yogurt")) return "2–3 tbsp";
-  if (t.includes("accompaniment") || t.includes("soup") || t.includes("liquid")) return "1 small bowl";
-  if (t.includes("dessert")) return "small bowl (~½ cup)";
-  return "1 serving";
-}
-/** How to prep a dish ahead of time. */
-function prepTipFor(d: { id: string; tags: string[]; ingredients: string[] }): string {
-  const t = d.tags;
-  if (t.includes("fermented")) return "Soak and grind the batter tonight and leave it to ferment overnight.";
-  if (t.includes("flatbread") || t.includes("wheat")) return "Knead the dough ahead, cover, and rest it so it's ready to roll.";
-  if (t.includes("rice") || t.includes("lentil")) return "Rinse and soak the rice/lentils ahead so the cook is quick.";
-  return "Chop and portion the ingredients ahead to save time.";
-}
-
 export default function Home() {
   const configured = supabaseConfigured();
   const supabase = useMemo(() => (configured ? supabaseBrowser() : null), [configured]);
@@ -157,7 +134,6 @@ export default function Home() {
     fetch("/api/personas").then((r) => r.json()).then((d) => setStatus(d.status)).catch(() => {});
     fetch("/api/catalog").then((r) => r.json()).then(setCatalog).catch(() => {});
     try { const fb = localStorage.getItem(FB_KEY); if (fb) setFeedback(JSON.parse(fb)); } catch {}
-    try { const pr = localStorage.getItem(PREP_KEY); if (pr) setPrepared(JSON.parse(pr)); } catch {}
     if (!supabase) { setUserId(null); return; }
     supabase.auth.getSession().then(({ data: { session } }) => setUserId(session?.user?.id ?? null));
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
@@ -195,15 +171,38 @@ export default function Home() {
     else { const n = parseInt(String(raw).replace(/[^\d]/g, ""), 10); if (Number.isFinite(n) && n > 0) setServings(n); }
   }, [profile]);
 
-  function markPrepared(slot: string) {
-    const key = `${new Date().toISOString().slice(0, 10)}:${slot}`;
-    setPrepared((prev) => {
-      const next = { ...prev, [key]: !prev[key] };
-      try { localStorage.setItem(PREP_KEY, JSON.stringify(next)); } catch {}
-      return next;
-    });
+  // load today's prep checklist from the database (per-user, RLS-enforced)
+  useEffect(() => {
+    if (!supabase || !userId) return;
+    let cancel = false;
+    (async () => {
+      const day = new Date().toISOString().slice(0, 10);
+      const { data } = await supabase.from("meal_prep").select("slot,prepared").eq("user_id", userId).eq("day", day);
+      if (cancel || !data) return;
+      const map: Record<string, boolean> = {};
+      for (const r of data as any[]) if (r.prepared) map[`${day}:${r.slot}`] = true;
+      setPrepared(map);
+    })();
+    return () => { cancel = true; };
+  }, [supabase, userId]);
+
+  const todayKey = () => new Date().toISOString().slice(0, 10);
+  async function markPrepared(slot: string, dishId?: string) {
+    if (!supabase || !userId) return;
+    const day = todayKey();
+    const key = `${day}:${slot}`;
+    const nextVal = !prepared[key];
+    setPrepared((prev) => ({ ...prev, [key]: nextVal })); // optimistic
+    const { error } = await supabase.from("meal_prep").upsert(
+      { user_id: userId, day, slot, dish_id: dishId ?? null, prepared: nextVal, updated_at: new Date().toISOString() },
+      { onConflict: "user_id,day,slot" },
+    );
+    if (error) { // honest rollback — never show "saved" when the write failed
+      setPrepared((prev) => ({ ...prev, [key]: !nextVal }));
+      setError("Couldn't save prep status: " + error.message);
+    }
   }
-  const isPrepared = (slot: string) => !!prepared[`${new Date().toISOString().slice(0, 10)}:${slot}`];
+  const isPrepared = (slot: string) => !!prepared[`${todayKey()}:${slot}`];
 
   function rate(dishId: string, v: "up" | "down") {
     setFeedback((prev) => {
@@ -401,6 +400,7 @@ export default function Home() {
                         <span>{sum("carbs_g")}g carbs</span>
                       </div>
                       <div className="plate-note">🛡 Every component was checked against your limits; together they stay in a safe range. Quantities are approximate guidance, not a medical prescription.</div>
+                      <Link className="run ghost recipe-link" href={`/recipes/${it.dish.id}?sides=${(it.sides ?? []).map((s) => s.id).join(",")}&servings=${servings}`}>📖 View full recipe &amp; method →</Link>
 
                       {optCount > 1 && (
                         <>
@@ -436,7 +436,7 @@ export default function Home() {
                         </div>
                       </a>
                       <div className="fb">
-                        <button className={`fb-btn prep-btn ${isPrepared(it.slot) ? "up" : ""}`} onClick={() => markPrepared(it.slot)}>{isPrepared(it.slot) ? "✓ Prepared" : "Mark prepared"}</button>
+                        <button className={`fb-btn prep-btn ${isPrepared(it.slot) ? "up" : ""}`} onClick={() => markPrepared(it.slot, it.dish.id)}>{isPrepared(it.slot) ? "✓ Prepared" : "Mark prepared"}</button>
                         <span className="fb-q">· How was {it.dish.name}?</span>
                         <button className={`fb-btn ${feedback[it.dish.id] === "up" ? "up" : ""}`} onClick={() => rate(it.dish.id, "up")}>👍</button>
                         <button className={`fb-btn ${feedback[it.dish.id] === "down" ? "down" : ""}`} onClick={() => rate(it.dish.id, "down")}>👎</button>
