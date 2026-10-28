@@ -40,16 +40,16 @@ type PresetPersona = {
 };
 type Catalog = {
   dishes: { id: string; name: string; cuisine: string; slots: string[] }[];
-  cuisines: string[]; regions: string[];
+  cuisines: string[]; cuisineOptions?: string[]; regions: string[];
   conditions: { id: string; label: string }[];
   allergies: string[]; medications: string[];
 };
 type CustomProfile = {
   id: string; name: string; age: number; cuisine: string; region?: string;
   conditions: string[]; medications: string[]; textureMax: number;
-  allergies: string[]; lovedDishIds: string[]; story?: string;
+  allergies: string[]; lovedDishIds: string[]; lovedFreeText?: string[]; story?: string;
 };
-type Account = { name: string; city?: string; createdAt: number; guest?: boolean };
+type Account = { name: string; city?: string; emergencyName?: string; emergencyPhone?: string; createdAt: number };
 
 const COND_LABEL: Record<string, string> = {
   type_2_diabetes: "Type 2 diabetes",
@@ -112,6 +112,14 @@ export default function Home() {
     setAccount(null);
     try { localStorage.removeItem(ACCT_KEY); } catch {}
   }
+  function updateAccount(patch: Partial<Account>) {
+    setAccount((a) => {
+      const next = { ...(a as Account), ...patch };
+      try { localStorage.setItem(ACCT_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }
+  const [showEmergency, setShowEmergency] = useState(false);
 
   function saveProfiles(next: CustomProfile[]) {
     setProfiles(next);
@@ -178,12 +186,15 @@ export default function Home() {
             still tastes like home. Built for grandmothers; works for your whole family.</p>
         </div>
         <div className="chips">
+          <button className="chip emergency-chip" onClick={() => setShowEmergency(true)}>🚨 Emergency</button>
           <span className="chip acct">👤 <b>{account.name}</b>{account.city ? ` · ${account.city}` : ""}<button className="signout" onClick={signOut}>sign out</button></span>
           <span className={`chip ${status?.qlooConfigured ? "live" : "mock"}`}>Qloo:&nbsp;<b>{status?.qlooConfigured ? "live key" : "mock graph"}</b></span>
           <span className="chip">Brain:&nbsp;<b>{status?.modelProvider ?? "…"}</b></span>
           <span className="chip">🔒 data stays on device</span>
         </div>
       </header>
+
+      {showEmergency && <EmergencyModal account={account} onClose={() => setShowEmergency(false)} onSave={updateAccount} />}
 
       <div className="greeting">Welcome back, <b>{account.name}</b> 👋 — let&rsquo;s plan meals that feel like home and keep you well.</div>
 
@@ -398,16 +409,25 @@ export default function Home() {
 function ProfileBuilder({ catalog, onSave, onCancel }: { catalog: Catalog; onSave: (p: CustomProfile) => void; onCancel: () => void }) {
   const [name, setName] = useState("");
   const [age, setAge] = useState<string>("65"); // string so deleting leaves it empty (no forced 0)
-  const [cuisine, setCuisine] = useState(catalog.cuisines[0] ?? "South Indian");
+  const cuisineList = catalog.cuisineOptions && catalog.cuisineOptions.length ? catalog.cuisineOptions : catalog.cuisines;
+  const [cuisine, setCuisine] = useState(cuisineList[0] ?? "South Indian");
   const [region, setRegion] = useState("");
   const [conditions, setConditions] = useState<string[]>([]);
   const [medications, setMedications] = useState<string[]>([]);
   const [textureMax, setTextureMax] = useState(7);
   const [allergies, setAllergies] = useState<string[]>([]);
-  const [loved, setLoved] = useState<string[]>([]);
+  const [loved, setLoved] = useState<string[]>([]); // catalog ids (quick-pick)
+  const [freeText, setFreeText] = useState<string[]>([]); // typed dishes
+  const [dishInput, setDishInput] = useState("");
 
   const toggle = (arr: string[], v: string, set: (x: string[]) => void) =>
     set(arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
+
+  const addDish = () => {
+    const v = dishInput.trim();
+    if (v && !freeText.some((f) => f.toLowerCase() === v.toLowerCase())) setFreeText([...freeText, v]);
+    setDishInput("");
+  };
 
   const cuisineDishes = catalog.dishes.filter((d) => d.cuisine === cuisine);
 
@@ -416,9 +436,14 @@ function ProfileBuilder({ catalog, onSave, onCancel }: { catalog: Catalog; onSav
       <div className="brow">
         <label>Name<input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Amma" /></label>
         <label>Age<input type="text" inputMode="numeric" value={age} onChange={(e) => { const v = e.target.value; if (v === "" || /^\d{1,3}$/.test(v)) setAge(v); }} placeholder="e.g. 65" /></label>
-        <label>Cuisine<select value={cuisine} onChange={(e) => { setCuisine(e.target.value); setLoved([]); }}>{catalog.cuisines.map((c) => <option key={c}>{c}</option>)}</select></label>
-        <label>Region<select value={region} onChange={(e) => setRegion(e.target.value)}>{catalog.regions.map((r) => <option key={r} value={r}>{r || "— any —"}</option>)}</select></label>
+        <label>Cuisine you love<input list="cuisine-list" value={cuisine} onChange={(e) => setCuisine(e.target.value)} placeholder="type or pick" />
+          <datalist id="cuisine-list">{cuisineList.map((c) => <option key={c} value={c} />)}</datalist>
+        </label>
+        <label>Home region<input list="region-list" value={region} onChange={(e) => setRegion(e.target.value)} placeholder="state / UT (optional)" />
+          <datalist id="region-list">{catalog.regions.map((r) => <option key={r} value={r}>{r || "— any —"}</option>)}</datalist>
+        </label>
       </div>
+      <p className="hint">We never guess your cuisine from your region — tell us what you actually love.</p>
 
       <div className="bfield"><span>Health conditions</span><div className="checks">
         {catalog.conditions.map((c) => <button key={c.id} className={`check ${conditions.includes(c.id) ? "on" : ""}`} onClick={() => toggle(conditions, c.id, setConditions)}>{c.label}</button>)}
@@ -435,16 +460,91 @@ function ProfileBuilder({ catalog, onSave, onCancel }: { catalog: Catalog; onSav
       <div className="bfield"><span>Chewing / swallowing ease: <b>{textureMax}</b> <small>(0 = liquids only, 7 = any texture)</small></span>
         <input type="range" min={0} max={7} value={textureMax} onChange={(e) => setTextureMax(+e.target.value)} /></div>
 
-      <div className="bfield"><span>Favorite dishes <small>(anchors the cultural match)</small></span><div className="checks">
-        {cuisineDishes.map((d) => <button key={d.id} className={`check ${loved.includes(d.id) ? "on" : ""}`} onClick={() => toggle(loved, d.id, setLoved)}>♥ {d.name}</button>)}
-      </div></div>
+      <div className="bfield"><span>Favorite dishes <small>(type ANY dish in your own words)</small></span>
+        <div className="dishadd">
+          <input value={dishInput} onChange={(e) => setDishInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addDish(); } }}
+            placeholder="e.g. Hyderabadi biryani, grandma's rasam…" />
+          <button type="button" className="run ghost" onClick={addDish} disabled={!dishInput.trim()}>Add</button>
+        </div>
+        {freeText.length > 0 && <div className="checks" style={{ marginTop: 8 }}>
+          {freeText.map((f) => <button key={f} type="button" className="check on" onClick={() => setFreeText(freeText.filter((x) => x !== f))}>♥ {f} ✕</button>)}
+        </div>}
+        {cuisineDishes.length > 0 && <div className="checks" style={{ marginTop: 8 }}>
+          <small style={{ width: "100%", color: "var(--text-faint)" }}>Or quick-pick from dishes we have:</small>
+          {cuisineDishes.map((d) => <button key={d.id} type="button" className={`check ${loved.includes(d.id) ? "on" : ""}`} onClick={() => toggle(loved, d.id, setLoved)}>♥ {d.name}</button>)}
+        </div>}
+      </div>
 
       <div className="cta">
         <button className="run" disabled={!name} onClick={() => onSave({
           id: `c_${Date.now()}`, name, age: Math.max(1, Math.min(120, parseInt(age, 10) || 30)), cuisine, region: region || undefined,
-          conditions, medications, textureMax, allergies, lovedDishIds: loved,
+          conditions, medications, textureMax, allergies, lovedDishIds: loved, lovedFreeText: freeText,
         })}>Save &amp; use profile</button>
         <button className="run ghost" onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------- emergency contact + WhatsApp ----------------
+const DEFAULT_EMERGENCY_MSG = "Hi, I need your help urgently. Please contact me as soon as you can. If you can, please call me now.";
+function sanitizePhone(raw: string): string {
+  return raw.replace(/[^\d+]/g, "").replace(/(?!^)\+/g, "");
+}
+function isValidPhone(p: string): boolean {
+  const digits = p.replace(/\D/g, "");
+  return digits.length >= 8 && digits.length <= 15;
+}
+
+function EmergencyModal({ account, onClose, onSave }: { account: Account; onClose: () => void; onSave: (p: Partial<Account>) => void }) {
+  const hasContact = !!(account.emergencyPhone && isValidPhone(account.emergencyPhone));
+  const [editing, setEditing] = useState(!hasContact);
+  const [eName, setEName] = useState(account.emergencyName ?? "");
+  const [ePhone, setEPhone] = useState(account.emergencyPhone ?? "");
+  const [msg, setMsg] = useState(DEFAULT_EMERGENCY_MSG);
+  const [opened, setOpened] = useState(false);
+
+  const phoneOk = isValidPhone(ePhone);
+  const waUrl = account.emergencyPhone
+    ? `https://wa.me/${account.emergencyPhone.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`
+    : "#";
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" role="dialog" aria-label="Emergency" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head"><b>🚨 Emergency help</b><button className="signout" onClick={onClose}>close</button></div>
+
+        <div className="emg-alert">
+          If this is a life-threatening emergency, call your local emergency number first
+          — <b>112</b> (all-India) or <b>108</b> (ambulance). This shortcut is <b>not</b> a substitute for emergency services.
+        </div>
+
+        {editing ? (
+          <div className="emg-edit">
+            <label>Trusted contact name<input value={eName} onChange={(e) => setEName(e.target.value)} placeholder="e.g. Priya (daughter)" /></label>
+            <label>Phone with country code<input value={ePhone} onChange={(e) => setEPhone(sanitizePhone(e.target.value))} placeholder="+9198XXXXXXXX" /></label>
+            {!phoneOk && ePhone.length > 0 && <div className="emg-err">Enter a valid number with country code (8–15 digits).</div>}
+            <div className="cta">
+              <button className="run" disabled={!phoneOk} onClick={() => { onSave({ emergencyName: eName.trim() || undefined, emergencyPhone: ePhone }); setEditing(false); }}>Save contact</button>
+              {hasContact && <button className="run ghost" onClick={() => setEditing(false)}>Cancel</button>}
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="emg-contact">Contact: <b>{account.emergencyName || "your trusted contact"}</b> · {account.emergencyPhone}
+              <button className="signout" onClick={() => setEditing(true)}>edit</button></div>
+            <label className="emg-msglabel">Message (you can edit it)
+              <textarea value={msg} onChange={(e) => setMsg(e.target.value)} rows={3} />
+            </label>
+            <a className="run emg-send" href={waUrl} target="_blank" rel="noreferrer" onClick={() => setOpened(true)}>Open WhatsApp with this message</a>
+            <div className="emg-note">
+              This <b>opens WhatsApp with the message pre-filled</b> — you still need to press send in WhatsApp.
+              We can&rsquo;t confirm delivery, and opening WhatsApp does not mean the message was sent.
+            </div>
+            {opened && <div className="emg-opened">WhatsApp was opened in a new tab. Press send there to notify your contact.</div>}
+          </>
+        )}
       </div>
     </div>
   );
@@ -519,6 +619,18 @@ function ChatWidget({ profile }: { profile: any }) {
 function Welcome({ onSignIn }: { onSignIn: (a: Account) => void }) {
   const [name, setName] = useState("");
   const [city, setCity] = useState("");
+  const [eName, setEName] = useState("");
+  const [ePhone, setEPhone] = useState("");
+  const submit = () => {
+    if (!name.trim()) return;
+    onSignIn({
+      name: name.trim(),
+      city: city.trim() || undefined,
+      emergencyName: eName.trim() || undefined,
+      emergencyPhone: ePhone.trim() ? sanitizePhone(ePhone) : undefined,
+      createdAt: Date.now(),
+    });
+  };
   return (
     <div className="welcome">
       <div className="welcome-card">
@@ -537,17 +649,22 @@ function Welcome({ onSignIn }: { onSignIn: (a: Account) => void }) {
         </div>
         <div className="wform">
           <label>Your name
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Lakshmi" onKeyDown={(e) => { if (e.key === "Enter" && name.trim()) onSignIn({ name: name.trim(), city: city.trim() || undefined, createdAt: Date.now() }); }} />
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Lakshmi" onKeyDown={(e) => { if (e.key === "Enter") submit(); }} />
           </label>
           <label>City <small>(optional — sharpens local taste)</small>
             <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="e.g. Chennai" />
           </label>
+          <label>Emergency contact name <small>(optional)</small>
+            <input value={eName} onChange={(e) => setEName(e.target.value)} placeholder="e.g. Priya (daughter)" />
+          </label>
+          <label>Emergency phone <small>(optional, with country code)</small>
+            <input value={ePhone} onChange={(e) => setEPhone(e.target.value)} placeholder="+9198XXXXXXXX" onKeyDown={(e) => { if (e.key === "Enter") submit(); }} />
+          </label>
         </div>
         <div className="wactions">
-          <button className="run" disabled={!name.trim()} onClick={() => onSignIn({ name: name.trim(), city: city.trim() || undefined, createdAt: Date.now() })}>Create my profile →</button>
-          <button className="run ghost" onClick={() => onSignIn({ name: "Guest", createdAt: Date.now(), guest: true })}>Continue as guest</button>
+          <button className="run" disabled={!name.trim()} onClick={submit}>Create my profile →</button>
         </div>
-        <p className="wnote">Your profile is stored only in this browser — nothing is uploaded. No password needed.</p>
+        <p className="wnote">Your profile is stored only in this browser — nothing is uploaded. You can add or change the emergency contact anytime from the 🚨 button.</p>
       </div>
     </div>
   );

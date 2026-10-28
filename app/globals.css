@@ -709,6 +709,118 @@ button.run.ghost {
   line-height: 1.6;
 }
 
+/* ---------- builder extras ---------- */
+.hint {
+  margin: -4px 0 8px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+.dishadd {
+  display: flex;
+  gap: 8px;
+}
+.dishadd input {
+  flex: 1;
+  background: var(--bg-elev2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 9px 10px;
+  font-size: 14px;
+}
+.dishadd input:focus { outline: none; border-color: var(--saffron); }
+
+/* ---------- emergency chip + modal ---------- */
+.emergency-chip {
+  border-color: var(--rose);
+  color: var(--rose);
+  font-weight: 700;
+  cursor: pointer;
+}
+.emergency-chip:hover { background: var(--rose-soft); }
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.modal {
+  width: min(460px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--bg-elev);
+  border: 1px solid var(--rose);
+  border-radius: 16px;
+  padding: 18px;
+}
+.modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  font-size: 16px;
+}
+.emg-alert {
+  background: var(--rose-soft);
+  border: 1px solid var(--rose);
+  border-radius: 10px;
+  padding: 11px 13px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+  margin-bottom: 14px;
+}
+.emg-edit label, .emg-msglabel {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+}
+.emg-edit input, .emg-msglabel textarea {
+  background: var(--bg-elev2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 14px;
+  font-family: inherit;
+}
+.emg-edit input:focus, .emg-msglabel textarea:focus { outline: none; border-color: var(--saffron); }
+.emg-err { color: var(--rose); font-size: 12px; margin-bottom: 8px; }
+.emg-contact {
+  font-size: 13.5px;
+  color: var(--text-dim);
+  margin-bottom: 12px;
+}
+.emg-contact b { color: var(--text); }
+.emg-send {
+  display: block;
+  text-align: center;
+  background: #25D366;
+  color: #04260f;
+  text-decoration: none;
+  font-weight: 700;
+  border-radius: 10px;
+  padding: 12px;
+  margin: 4px 0 10px;
+}
+.emg-note {
+  font-size: 12px;
+  color: var(--text-faint);
+  line-height: 1.5;
+}
+.emg-opened {
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: var(--teal);
+}
+
 /* ---------- Ask NaniAI chat widget ---------- */
 .chat-fab {
   position: fixed;

@@ -15,13 +15,27 @@ export async function GET() {
       slots: d.slots,
     })),
     cuisines,
+    // Broad cuisine preference options (searchable in the UI). The vetted dish
+    // catalog is currently India-focused; these let users state preferences
+    // honestly even where we don't yet have matching vetted dishes.
+    cuisineOptions: [
+      "North Indian", "South Indian", "East Indian", "West Indian",
+      "Northeast Indian", "Central Indian", "Himalayan", "Coastal Indian",
+      "Mughlai", "Awadhi", "Chettinad", "Udupi", "Malvani", "Goan",
+      "Bengali", "Gujarati", "Rajasthani", "Maharashtrian", "Punjabi",
+      "Kashmiri", "Hyderabadi", "Andhra", "Kerala", "Tamil", "Karnataka",
+      "Italian", "Mediterranean", "Mexican", "American", "French",
+      "Chinese", "Thai", "Japanese", "Middle Eastern", "Continental",
+    ],
+    // All Indian states + union territories (+ "" = any), used as the regional anchor.
     regions: [
-      "Tamil Nadu",
-      "Kerala",
-      "Karnataka",
-      "Andhra Pradesh",
-      "Punjab",
-      "",
+      "", "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
+      "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka",
+      "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram",
+      "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu",
+      "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal",
+      "Andaman and Nicobar Islands", "Chandigarh", "Dadra and Nagar Haveli and Daman and Diu",
+      "Delhi", "Jammu and Kashmir", "Ladakh", "Lakshadweep", "Puducherry",
     ],
     conditions: [
       { id: "type_2_diabetes", label: "Type 2 diabetes" },
@@ -29,7 +43,7 @@ export async function GET() {
       { id: "chronic_kidney_disease", label: "Kidney disease" },
       { id: "dysphagia", label: "Swallowing difficulty" },
     ],
-    allergies: ["peanut", "nuts", "dairy", "gluten", "fish"],
-    medications: ["metformin", "amlodipine", "warfarin"],
+    allergies: ["peanut", "nuts", "dairy", "gluten", "fish", "shellfish", "soy", "egg", "sesame"],
+    medications: ["metformin", "amlodipine", "warfarin", "insulin", "losartan", "atorvastatin"],
   });
 }

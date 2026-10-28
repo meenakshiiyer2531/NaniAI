@@ -32,6 +32,22 @@ function sanitizePersona(input: any): Persona {
     ? input.lovedDishIds.filter((id: any) => typeof id === "string" && DISHES_BY_ID[id])
     : [];
 
+  // Free-text favorites: sanitize to short strings, and opportunistically resolve
+  // any that name a dish we actually have (so they can influence the safe plan).
+  const lovedFreeText: string[] = Array.isArray(input?.lovedFreeText)
+    ? input.lovedFreeText
+        .filter((s: any) => typeof s === "string" && s.trim())
+        .map((s: string) => s.trim().slice(0, 60))
+        .slice(0, 20)
+    : [];
+  for (const txt of lovedFreeText) {
+    const lc = txt.toLowerCase();
+    const match = DISHES.find(
+      (d) => d.name.toLowerCase() === lc || d.name.toLowerCase().includes(lc) || lc.includes(d.name.toLowerCase()),
+    );
+    if (match && !lovedDishIds.includes(match.id)) lovedDishIds.push(match.id);
+  }
+
   return {
     id: "custom",
     name: String(input?.name ?? "You").slice(0, 40) || "You",
@@ -47,6 +63,7 @@ function sanitizePersona(input: any): Persona {
       ? input.allergies.map((a: any) => String(a).slice(0, 30)).slice(0, 10)
       : [],
     lovedDishIds,
+    lovedFreeText,
     story: String(input?.story ?? "").slice(0, 400),
   };
 }

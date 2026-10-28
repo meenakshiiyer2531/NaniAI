@@ -57,6 +57,9 @@ export interface Persona {
   allergies: string[];
   /** Dish ids the person loves — the cultural anchor for Qloo affinity. */
   lovedDishIds: string[];
+  /** Free-text favorite dishes the person typed in their own words. Used as
+   *  extra cultural/chat context; never gated on (no verified nutrition). */
+  lovedFreeText?: string[];
   story: string;
 }
 
