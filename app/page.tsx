@@ -12,7 +12,7 @@ type Dish = {
   nutrition: { kcal: number; sugar_g: number; sodium_mg: number; carbs_g: number; potassium_mg?: number };
 };
 type Alt = { dish: Dish; familiarity: number; receipt: string[] };
-type PlanItem = { slot: string; dish: Dish; familiarity: number; receipt: string[]; alternatives?: Alt[] };
+type PlanItem = { slot: string; dish: Dish; side?: Dish; familiarity: number; receipt: string[]; alternatives?: Alt[] };
 type PlanResponse = {
   plan: { items: PlanItem[]; avgFamiliarity: number; violationCount: number };
   substitutions: { fromDishId: string; toDishId: string; tradeoff: string }[];
@@ -177,18 +177,22 @@ export default function Home() {
 
   const effItems: PlanItem[] = useMemo(() => {
     if (!data) return [];
-    return data.grounded.plan.items.map((it) => {
-      const opts = [it, ...(it.alternatives ?? []).map((a) => ({ ...it, dish: a.dish, familiarity: a.familiarity, receipt: a.receipt }))];
+    const items = data.grounded.plan.items.map((it) => {
+      const opts = [it, ...(it.alternatives ?? []).map((a) => ({ ...it, dish: a.dish, side: undefined, familiarity: a.familiarity, receipt: a.receipt }))];
       const idx = (swapIdx[it.slot] ?? 0) % opts.length;
       return opts[idx];
     });
+    const now = currentSlot();
+    const ord: Record<string, number> = { breakfast: 0, lunch: 1, snack: 2, dinner: 3 };
+    return [...items].sort((a, b) => (a.slot === now ? -1 : b.slot === now ? 1 : (ord[a.slot] ?? 9) - (ord[b.slot] ?? 9)));
   }, [data, swapIdx]);
-  const totals = useMemo(() => (effItems.length ? dayTotals(effItems) : null), [effItems]);
+  const allDishes = useMemo(() => effItems.flatMap((it) => [it.dish, ...(it.side ? [it.side] : [])]), [effItems]);
+  const totals = useMemo(() => (allDishes.length ? dayTotals(allDishes.map((d) => ({ dish: d })) as any) : null), [allDishes]);
   const grocery = useMemo(() => {
     const set = new Set<string>();
-    effItems.forEach((it) => it.dish.ingredients.forEach((i) => set.add(i)));
+    allDishes.forEach((d) => d.ingredients.forEach((i) => set.add(i)));
     return Array.from(set).sort();
-  }, [effItems]);
+  }, [allDishes]);
 
   // ---------- gates ----------
   if (!configured) return <ConfigNotice />;
@@ -258,8 +262,7 @@ export default function Home() {
 
       {data && totals && (
         <>
-          <div className="section-label">Your day — tap a meal for recipe, video &amp; options <InfoTip text={data.grounded.negotiation[data.grounded.negotiation.length - 1]?.message || "Chosen to match the cuisines and dishes you enjoy, then checked against your health limits."} /></div>
-          <div className="mealtip">🌅 Tip: try to eat <b>breakfast early</b> (by 8:30 am) and keep dinner lighter and before 8 pm — steadier energy and easier digestion. Suggested times are on each meal.</div>
+          <div className="section-label">Your day — tap a meal for recipe, video &amp; options <InfoTip text={"Chosen to match the cuisines and dishes you enjoy, then checked against your health limits."} /></div>
           <div className="day-grid">
             {effItems.map((it) => {
               const recipe = buildRecipe(it.dish as any);
@@ -272,8 +275,8 @@ export default function Home() {
                   <div className="meal-top" onClick={() => setExpanded((e) => ({ ...e, [it.slot]: !e[it.slot] }))}>
                     <div>
                       <div className="slot">{SLOT_EMOJI[it.slot]} {it.slot} {isNow && <span className="now-badge">now</span>}</div>
-                      <div className="dish">{it.dish.name}</div>
-                      <div className="cuis">{it.dish.cuisine} · suggested {SLOT_TIME[it.slot]}</div>
+                      <div className="dish">{it.dish.name}{it.side ? <span className="with"> + {it.side.name}</span> : ""}</div>
+                      <div className="cuis">{it.dish.cuisine} · suggested {SLOT_TIME[it.slot]} · prep {recipe.prep}</div>
                     </div>
                     <div className="chev">{isOpen ? "▾" : "▸"}</div>
                   </div>
@@ -281,9 +284,12 @@ export default function Home() {
                   {isOpen && (
                     <div className="meal-detail">
                       <div className="nut">
-                        <span>{it.dish.nutrition.kcal} kcal</span><span>{it.dish.nutrition.sugar_g}g sugar</span>
-                        <span>{it.dish.nutrition.sodium_mg}mg sodium</span><span>{it.dish.nutrition.carbs_g}g carbs</span>
+                        <span>{it.dish.nutrition.kcal + (it.side?.nutrition.kcal ?? 0)} kcal</span>
+                        <span>{(it.dish.nutrition.sugar_g + (it.side?.nutrition.sugar_g ?? 0)).toFixed(1)}g sugar</span>
+                        <span>{it.dish.nutrition.sodium_mg + (it.side?.nutrition.sodium_mg ?? 0)}mg sodium</span>
+                        <span>{it.dish.nutrition.carbs_g + (it.side?.nutrition.carbs_g ?? 0)}g carbs</span>
                       </div>
+                      {it.side && <div className="plate-note">A full plate: <b>{it.dish.name}</b> with <b>{it.side.name}</b> — together within your limits.</div>}
                       {optCount > 1 && (
                         <>
                           <div className="recipe-h">Choose this meal — {optCount} safe options</div>
@@ -361,7 +367,6 @@ export default function Home() {
             </div>
           </div>
 
-          <CarePanel care={data.care} />
           <div className="cta"><button className="run ghost" onClick={() => window.print()}>🖨 Print / share this day</button></div>
           <div className="foot">Your meals stay within the limits that matter for your health, enforced by deterministic safety code. A wellness companion, not medical advice — always consult your clinician.</div>
         </>
@@ -779,7 +784,7 @@ function ChatWidget({ profile }: { profile: any }) {
       <button className="chat-fab" onClick={() => setOpen((o) => !o)} aria-label="Ask NaniAI">{open ? "✕" : "💬 Ask NaniAI"}</button>
       {open && (
         <div className="chat-panel" role="dialog" aria-label="Ask NaniAI assistant">
-          <div className="chat-head"><b>Ask NaniAI</b><span>general info · not medical advice</span></div>
+          <div className="chat-head"><b>Ask NaniAI</b></div>
           <div className="chat-body">
             {msgs.map((m, i) => <div key={i} className={`bubble ${m.role}`}>{m.content}</div>)}
             {busy && <div className="bubble assistant typing">NaniAI is thinking…</div>}

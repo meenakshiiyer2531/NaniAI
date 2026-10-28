@@ -9,6 +9,19 @@ export interface Recipe {
   steps: string[];
   youtubeQuery: string;
   youtubeUrl: string;
+  /** Rough, approximate prep guidance (labelled with ~ in the UI). */
+  prep: string;
+}
+
+function estimatePrep(dish: Dish): string {
+  if (dish.tags.includes("fermented")) return "~15 min active · soak/ferment ahead";
+  if (dish.tags.includes("fried")) return "~25 min";
+  if (dish.tags.includes("steamed")) return "~15 min + steam";
+  if (dish.tags.includes("griddled")) return "~20 min";
+  if (dish.tags.includes("soup") || dish.tags.includes("liquid")) return "~15 min";
+  if (dish.tags.includes("dessert")) return "~20 min";
+  if (dish.tags.includes("rice")) return "~20 min";
+  return "~15 min";
 }
 
 export function buildRecipe(dish: Dish): Recipe {
@@ -37,5 +50,5 @@ export function buildRecipe(dish: Dish): Recipe {
   const youtubeUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(
     youtubeQuery,
   )}`;
-  return { steps, youtubeQuery, youtubeUrl };
+  return { steps, youtubeQuery, youtubeUrl, prep: estimatePrep(dish) };
 }

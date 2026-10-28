@@ -34,6 +34,27 @@ function genericHealthScore(d: Dish): number {
   return -(d.nutrition.sugar_g * 3 + d.nutrition.sodium_mg / 80 + d.nutrition.kcal / 60);
 }
 
+const isDessert = (d: Dish) => d.tags.includes("dessert");
+const isThin = (d: Dish) => d.tags.includes("soup") || d.tags.includes("liquid");
+/** A "main" is a substantial dish — not a dessert and not a thin soup/broth.
+ *  Rasam or payasam should accompany a meal, never BE the whole meal. */
+const isMainDish = (d: Dish) => !isDessert(d) && !isThin(d);
+
+/** Would main + side together still respect every per-meal cap + texture? */
+function plateFits(main: Dish, side: Dish, ctx: Ctx): boolean {
+  const c = ctx.constraints;
+  const sugar = main.nutrition.sugar_g + side.nutrition.sugar_g;
+  const sodium = main.nutrition.sodium_mg + side.nutrition.sodium_mg;
+  const carbs = main.nutrition.carbs_g + side.nutrition.carbs_g;
+  const potassium = (main.nutrition.potassium_mg ?? 0) + (side.nutrition.potassium_mg ?? 0);
+  if (sugar > c.maxSugarPerMeal_g) return false;
+  if (sodium > c.maxSodiumPerMeal_mg) return false;
+  if (carbs > c.maxCarbsPerMeal_g) return false;
+  if (c.maxPotassiumPerMeal_mg != null && potassium > c.maxPotassiumPerMeal_mg) return false;
+  if (side.texture > ctx.persona.textureMax) return false;
+  return true;
+}
+
 function pickForSlots(
   ctx: Ctx,
   mode: PlanMode,
@@ -42,35 +63,34 @@ function pickForSlots(
   const used = new Set<string>();
   const items: PlanItem[] = [];
 
+  const rank = (a: Dish, b: Dish) => {
+    if (mode === "grounded") {
+      const fa = familiarityOf(ctx.affById.get(a.id));
+      const fb = familiarityOf(ctx.affById.get(b.id));
+      if (fb !== fa) return fb - fa;
+      return genericHealthScore(b) - genericHealthScore(a);
+    }
+    return genericHealthScore(b) - genericHealthScore(a);
+  };
+
   for (const slot of SLOTS) {
-    const pool = DISHES.filter(
-      (d) =>
-        d.slots.includes(slot) &&
-        ctx.compById.get(d.id)!.compliant &&
-        !used.has(d.id),
+    const compliantPool = DISHES.filter(
+      (d) => d.slots.includes(slot) && ctx.compById.get(d.id)!.compliant && !used.has(d.id),
     );
-    if (pool.length === 0) continue;
+    if (compliantPool.length === 0) continue;
 
-    pool.sort((a, b) => {
-      if (mode === "grounded") {
-        const fa = familiarityOf(ctx.affById.get(a.id));
-        const fb = familiarityOf(ctx.affById.get(b.id));
-        if (fb !== fa) return fb - fa;
-        return genericHealthScore(b) - genericHealthScore(a);
-      } else {
-        // baseline: purely generic health, no cultural signal
-        return genericHealthScore(b) - genericHealthScore(a);
-      }
-    });
+    // Primary pick for a real meal (breakfast/lunch/dinner) must be a substantial
+    // main; snacks may be lighter. Fall back to the full pool if no main exists.
+    const mains = slot === "snack" ? compliantPool : compliantPool.filter(isMainDish);
+    const primaryPool = mains.length > 0 ? mains : compliantPool;
+    primaryPool.sort(rank);
 
-    // Daily variety (grounded only): rotate the pick through the top few
-    // high-familiarity options so each day feels fresh while staying safe.
     let dish: Dish;
     if (mode === "grounded") {
-      const topK = pool.slice(0, Math.min(3, pool.length));
+      const topK = primaryPool.slice(0, Math.min(5, primaryPool.length));
       dish = topK[day % topK.length];
     } else {
-      dish = pool[0];
+      dish = primaryPool[0];
     }
     used.add(dish.id);
 
@@ -81,8 +101,23 @@ function pickForSlots(
       familiarity: familiarityOf(aff),
       receipt: aff?.evidence ?? [],
     };
+
+    // Lunch & dinner: add a complementary side so it reads as a full plate —
+    // only if the combined plate still fits every safety cap.
+    if (slot === "lunch" || slot === "dinner") {
+      const sideCandidates = compliantPool
+        .filter((d) => d.id !== dish.id && !used.has(d.id) && !isDessert(d))
+        .filter((d) => isThin(d) || d.tags.includes("vegetable") || d.tags.includes("lentil") || d.tags.includes("yogurt"))
+        .sort(rank);
+      const side = sideCandidates.find((s) => plateFits(dish, s, ctx));
+      if (side) {
+        item.side = side;
+        used.add(side.id);
+      }
+    }
+
     if (mode === "grounded") {
-      item.alternatives = pool
+      item.alternatives = primaryPool
         .filter((d) => d.id !== dish.id)
         .slice(0, 3)
         .map((d) => ({
