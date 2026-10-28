@@ -385,6 +385,11 @@ export default function Home() {
           </div>
         </>
       )}
+
+      <ChatWidget profile={sel?.kind === "custom" ? {
+        name: sel.profile.name, cuisine: sel.profile.cuisine, region: sel.profile.region,
+        conditions: sel.profile.conditions, allergies: sel.profile.allergies, lovedDishIds: sel.profile.lovedDishIds,
+      } : { name: account.name }} />
     </div>
   );
 }
@@ -442,6 +447,71 @@ function ProfileBuilder({ catalog, onSave, onCancel }: { catalog: Catalog; onSav
         <button className="run ghost" onClick={onCancel}>Cancel</button>
       </div>
     </div>
+  );
+}
+
+// ---------------- Ask NaniAI chat widget ----------------
+type ChatMsg = { role: "user" | "assistant"; content: string };
+const SUGGESTED = [
+  "What can I eat that's quick and familiar?",
+  "What's a good swap for a dish I can't have?",
+  "What's in Uttapam?",
+  "Give me a light dinner idea",
+];
+
+function ChatWidget({ profile }: { profile: any }) {
+  const [open, setOpen] = useState(false);
+  const [msgs, setMsgs] = useState<ChatMsg[]>([
+    { role: "assistant", content: "Hi! I'm NaniAI. Ask me about meals, ingredients, substitutions, cooking, or general nutrition. For anything medical, I'll point you to your clinician." },
+  ]);
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function send(text: string) {
+    const q = text.trim();
+    if (!q || busy) return;
+    const next = [...msgs, { role: "user" as const, content: q }];
+    setMsgs(next);
+    setInput("");
+    setBusy(true);
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ messages: next, profile }),
+      });
+      const j = await res.json();
+      setMsgs((m) => [...m, { role: "assistant", content: j.reply ?? j.error ?? "Sorry, I couldn't answer that." }]);
+    } catch {
+      setMsgs((m) => [...m, { role: "assistant", content: "I'm having trouble connecting right now. Please try again." }]);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <button className="chat-fab" onClick={() => setOpen((o) => !o)} aria-label="Ask NaniAI">
+        {open ? "✕" : "💬 Ask NaniAI"}
+      </button>
+      {open && (
+        <div className="chat-panel" role="dialog" aria-label="Ask NaniAI assistant">
+          <div className="chat-head"><b>Ask NaniAI</b><span>general info · not medical advice</span></div>
+          <div className="chat-body">
+            {msgs.map((m, i) => <div key={i} className={`bubble ${m.role}`}>{m.content}</div>)}
+            {busy && <div className="bubble assistant typing">NaniAI is thinking…</div>}
+            {msgs.length <= 1 && (
+              <div className="suggest">
+                {SUGGESTED.map((s) => <button key={s} onClick={() => send(s)}>{s}</button>)}
+              </div>
+            )}
+          </div>
+          <form className="chat-input" onSubmit={(e) => { e.preventDefault(); send(input); }}>
+            <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Ask anything about food…" aria-label="Message" />
+            <button type="submit" disabled={busy || !input.trim()}>Send</button>
+          </form>
+        </div>
+      )}
+    </>
   );
 }
 
