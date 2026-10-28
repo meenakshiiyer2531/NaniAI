@@ -1590,3 +1590,124 @@ button.run:not(.ghost) { background: linear-gradient(135deg, #f0a838, #f6bf63); 
 
 /* nicer scrollbar in warm theme */
 * { scrollbar-color: var(--border) transparent; }
+
+/* ===== v6: richer motion & micro-interactions ===== */
+@keyframes sheen { 0% { transform: translateX(-130%) skewX(-18deg); } 55%, 100% { transform: translateX(320%) skewX(-18deg); } }
+button.run:not(.ghost) { position: relative; overflow: hidden; }
+button.run:not(.ghost)::after {
+  content: ""; position: absolute; top: 0; left: 0; width: 36%; height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,.4), transparent); transform: translateX(-130%) skewX(-18deg);
+}
+button.run:not(.ghost):hover::after { animation: sheen 1s ease; }
+
+.bubble { animation: fadeInUp .3s ease both; }
+.choice { transition: transform .12s ease, border-color .15s, background .15s; }
+.choice:hover { transform: translateX(3px); }
+
+.avatar { transition: transform .22s ease, box-shadow .22s; }
+.avatar-btn:hover .avatar { transform: scale(1.06) rotate(-4deg); box-shadow: 0 6px 22px rgba(240,168,56,.45); }
+
+@keyframes glowNow {
+  0%, 100% { box-shadow: 0 0 0 1px var(--teal), 0 12px 30px rgba(84,199,162,.12); }
+  50% { box-shadow: 0 0 0 1px var(--teal), 0 14px 44px rgba(84,199,162,.30); }
+}
+.meal.now { animation: fadeInUp .45s ease both, glowNow 3.6s ease-in-out 1s infinite; }
+
+.chat-fab { transition: transform .15s ease, box-shadow .2s; }
+.chat-fab:hover { transform: translateY(-3px) scale(1.03); box-shadow: 0 14px 34px rgba(240,168,56,.4); }
+
+.helpline, .timerow { transition: transform .12s ease, border-color .15s; }
+.navbtn.ghost:hover { color: var(--saffron); }
+
+/* tiny lift on meal expand chevron + fab icon */
+.meal-top:hover .chev { color: var(--saffron); }
+
+/* gentle float-in for the whole plan section heading */
+.section-label { animation: fadeIn .5s ease both; }
+
+/* ===== v7: info popover, prep card, full mobile ===== */
+.infotip-pop { opacity: 1 !important; visibility: visible !important; transform: none !important; z-index: 200; left: auto; right: 0; }
+
+.prep-card {
+  display: flex; gap: 14px; align-items: flex-start;
+  background: linear-gradient(110deg, var(--saffron-soft), transparent 70%), var(--bg-elev);
+  border: 1px solid var(--border); border-left: 4px solid var(--saffron);
+  border-radius: var(--radius); padding: 16px 18px; margin: 4px 0 8px; box-shadow: var(--shadow);
+  animation: fadeInUp .4s ease both;
+}
+.prep-emoji { font-size: 28px; }
+.prep-h { font-family: var(--font-display); font-size: 17px; margin-bottom: 4px; }
+.prep-dish { font-size: 14px; color: var(--text-dim); margin-bottom: 4px; }
+.prep-dish b { color: var(--text); }
+.prep-tip { font-size: 13px; color: var(--text-faint); line-height: 1.5; }
+
+/* ===== mobile ===== */
+@media (max-width: 680px) {
+  .wrap { padding: 18px 14px 90px; }
+  .header { flex-direction: column; gap: 12px; }
+  .topnav { width: 100%; justify-content: flex-start; }
+  .brand h1 { font-size: 28px; }
+  .brand p { font-size: 13.5px; }
+  .greeting { font-size: 14.5px; }
+  .nutgrid { grid-template-columns: repeat(2, 1fr); }
+  .profile-grid { grid-template-columns: 1fr; }
+  .panels { grid-template-columns: 1fr; }
+  .home-cards { grid-template-columns: 1fr 1fr; }
+  .dish { font-size: 19px; }
+  .wtitle { font-size: 34px; }
+  .ob-q { font-size: 25px; }
+  .modal { padding: 16px; }
+  .brow { grid-template-columns: 1fr; }
+  .cta { gap: 8px; }
+  button.run { padding: 11px 18px; font-size: 14.5px; }
+  .chat-panel { right: 10px; left: 10px; width: auto; bottom: 68px; }
+  .chat-fab { right: 12px; bottom: 12px; }
+}
+@media (max-width: 420px) {
+  .home-cards { grid-template-columns: 1fr; }
+  .nutgrid { grid-template-columns: 1fr 1fr; }
+  .avatar-name { display: inline; }
+}
+
+/* ===== v8: meal chips, familiarity row, extra motion ===== */
+.mchips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.mchip {
+  font-size: 11.5px; color: var(--text-dim); background: var(--bg-elev2);
+  border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; white-space: nowrap;
+  transition: transform .12s ease, border-color .15s;
+}
+.mchip:hover { transform: translateY(-1px); border-color: var(--saffron); }
+.fam-row { display: flex; align-items: center; gap: 10px; margin: 10px 0 2px; }
+.fam-row .fam { flex: 1; margin: 0; }
+.fam-label { font-size: 11.5px; color: var(--text-faint); white-space: nowrap; }
+
+/* meal detail reveal */
+@keyframes revealDown { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+.meal-detail { animation: revealDown .28s ease both; }
+
+/* nutrition cells pop on hover */
+.nutcell { transition: transform .14s ease, background .15s; }
+.nutcell:hover { transform: translateY(-3px); background: var(--saffron-soft); }
+.nv { font-family: var(--font-display); }
+
+/* grocery chips */
+.gitem { transition: transform .12s ease, border-color .15s; border: 1px solid transparent; }
+.gitem:hover { transform: translateY(-1px); border-color: var(--border); }
+
+/* choices slide a touch + selected ring */
+.choice.on { box-shadow: inset 0 0 0 1px var(--teal); }
+
+/* chevron rotate */
+.chev { transition: transform .2s ease, color .15s; display: inline-block; }
+
+/* soft page-load stagger for panels */
+.panels .panel:nth-child(2) { animation-delay: .06s; }
+
+/* buttons: press feedback */
+button.run:active:not(:disabled) { transform: translateY(0) scale(.98); }
+.navbtn:active { transform: scale(.97); }
+
+/* focus-visible rings for accessibility */
+button:focus-visible, input:focus-visible, a:focus-visible, .infotip:focus-visible {
+  outline: 2px solid var(--saffron); outline-offset: 2px; border-radius: 6px;
+}

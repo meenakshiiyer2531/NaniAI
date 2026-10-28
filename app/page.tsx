@@ -66,6 +66,23 @@ function avatarEmoji(p: Profile): string {
   return "🧑";
 }
 
+/** Turn the real Qloo/affinity evidence into a clean, readable "why" sentence
+ *  (strips internal popularity numbers/tag jargon). */
+function mealWhy(dishName: string, receipt: string[], side?: string): string {
+  const parts = (receipt || [])
+    .map((s) =>
+      s
+        .replace(/Qloo Taste AI:\s*recognized as\s*[“"']?([^“"']+?)[”"']?\s*\(popularity[^)]*\)/i, "a well-loved $1")
+        .replace(/\(popularity[^)]*\)/gi, "")
+        .replace(/Qloo Taste AI:\s*/gi, "")
+        .replace(/\s+/g, " ")
+        .trim(),
+    )
+    .filter(Boolean);
+  const base = parts.length ? parts.join("; ") : "it matches the cuisines and dishes you enjoy";
+  return `Why ${dishName}${side ? ` with ${side}` : ""}: ${base}. It also fits within every health limit we track for you.`;
+}
+
 function currentSlot(): "breakfast" | "lunch" | "snack" | "dinner" {
   const h = new Date().getHours();
   if (h >= 5 && h < 11) return "breakfast";
@@ -101,6 +118,7 @@ export default function Home() {
   const [feedback, setFeedback] = useState<Record<string, "up" | "down">>({});
   const [showEmergency, setShowEmergency] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const [showFullDay, setShowFullDay] = useState(false);
 
   useEffect(() => {
     fetch("/api/personas").then((r) => r.json()).then((d) => setStatus(d.status)).catch(() => {});
@@ -187,12 +205,25 @@ export default function Home() {
     return [...items].sort((a, b) => (a.slot === now ? -1 : b.slot === now ? 1 : (ord[a.slot] ?? 9) - (ord[b.slot] ?? 9)));
   }, [data, swapIdx]);
   const allDishes = useMemo(() => effItems.flatMap((it) => [it.dish, ...(it.side ? [it.side] : [])]), [effItems]);
+  const nowSlot = currentSlot();
+  const visibleItems = useMemo(() => (showFullDay ? effItems : effItems.filter((it) => it.slot === nowSlot)), [effItems, showFullDay, nowSlot]);
+  const breakfastItem = useMemo(() => effItems.find((it) => it.slot === "breakfast"), [effItems]);
+  const prepTip = useMemo(() => {
+    if (!breakfastItem) return "";
+    const t = breakfastItem.dish.tags;
+    if (t.includes("fermented")) return "Soak and grind the batter tonight, and leave it to ferment overnight.";
+    if (t.includes("lentil") || t.includes("rice")) return "Soak the rice/lentils tonight so the morning cook is quick.";
+    return "Chop and set out what you can tonight to save time in the morning.";
+  }, [breakfastItem]);
+  // At dinner, also buy for tomorrow's breakfast.
   const totals = useMemo(() => (allDishes.length ? dayTotals(allDishes.map((d) => ({ dish: d })) as any) : null), [allDishes]);
   const grocery = useMemo(() => {
     const set = new Set<string>();
-    allDishes.forEach((d) => d.ingredients.forEach((i) => set.add(i)));
+    const dishes = showFullDay ? allDishes : visibleItems.flatMap((it) => [it.dish, ...(it.side ? [it.side] : [])]);
+    dishes.forEach((d) => d.ingredients.forEach((i) => set.add(i)));
+    if (nowSlot === "dinner" && breakfastItem) breakfastItem.dish.ingredients.forEach((i) => set.add(i)); // prep for tomorrow
     return Array.from(set).sort();
-  }, [allDishes]);
+  }, [allDishes, visibleItems, showFullDay, nowSlot, breakfastItem]);
 
   // ---------- gates ----------
   if (!configured) return <ConfigNotice />;
@@ -262,9 +293,9 @@ export default function Home() {
 
       {data && totals && (
         <>
-          <div className="section-label">Your day — tap a meal for recipe, video &amp; options <InfoTip text={"Chosen to match the cuisines and dishes you enjoy, then checked against your health limits."} /></div>
+          <div className="section-label">{showFullDay ? "Your full day" : `Right now — your ${nowSlot}`} — tap a meal for recipe, video &amp; options <InfoTip text={"Chosen to match the cuisines and dishes you enjoy, then checked against your health limits."} /></div>
           <div className="day-grid">
-            {effItems.map((it) => {
+            {visibleItems.map((it) => {
               const recipe = buildRecipe(it.dish as any);
               const isOpen = expanded[it.slot];
               const orig = data.grounded.plan.items.find((o) => o.slot === it.slot)!;
@@ -275,12 +306,19 @@ export default function Home() {
                   <div className="meal-top" onClick={() => setExpanded((e) => ({ ...e, [it.slot]: !e[it.slot] }))}>
                     <div>
                       <div className="slot">{SLOT_EMOJI[it.slot]} {it.slot} {isNow && <span className="now-badge">now</span>}</div>
-                      <div className="dish">{it.dish.name}{it.side ? <span className="with"> + {it.side.name}</span> : ""}</div>
-                      <div className="cuis">{it.dish.cuisine} · suggested {SLOT_TIME[it.slot]} · prep {recipe.prep}</div>
+                      <div className="dish">{it.dish.name}{it.side ? <span className="with"> + {it.side.name}</span> : ""} <InfoTip text={mealWhy(it.dish.name, it.receipt, it.side?.name)} /></div>
+                      <div className="mchips">
+                        <span className="mchip">🍽 {it.dish.cuisine}</span>
+                        <span className="mchip">⏰ {SLOT_TIME[it.slot]}</span>
+                        <span className="mchip">⏱ prep {recipe.prep}</span>
+                      </div>
                     </div>
                     <div className="chev">{isOpen ? "▾" : "▸"}</div>
                   </div>
-                  <div className="fam"><span style={{ width: `${it.familiarity}%` }} /></div>
+                  <div className="fam-row">
+                    <div className="fam"><span style={{ width: `${it.familiarity}%` }} /></div>
+                    <span className="fam-label">familiarity {it.familiarity}</span>
+                  </div>
                   {isOpen && (
                     <div className="meal-detail">
                       <div className="nut">
@@ -329,9 +367,26 @@ export default function Home() {
             })}
           </div>
 
+          <div className="cta">
+            <button className="run ghost" onClick={() => setShowFullDay((s) => !s)}>
+              {showFullDay ? `Show only my ${nowSlot}` : "Show my full day ▾"}
+            </button>
+          </div>
+
+          {!showFullDay && nowSlot === "dinner" && breakfastItem && (
+            <div className="prep-card">
+              <div className="prep-emoji">🌅</div>
+              <div>
+                <div className="prep-h">Tonight, prep for tomorrow&rsquo;s breakfast</div>
+                <div className="prep-dish"><b>{breakfastItem.dish.name}</b> — {breakfastItem.dish.cuisine} · {buildRecipe(breakfastItem.dish as any).prep}</div>
+                <div className="prep-tip">{prepTip}</div>
+              </div>
+            </div>
+          )}
+
           <div className="panels">
             <div className="panel">
-              <h3>📊 Today&rsquo;s nutrition</h3>
+              <h3>📊 Today&rsquo;s nutrition <InfoTip text={`Combined totals for your shown meals${showFullDay ? "" : " (just your " + nowSlot + ")"}. Every dish was checked against your per-meal limits before it was suggested, so these stay in a safe range for you.`} /></h3>
               <div className="nutgrid">
                 <div className="nutcell"><div className="nv">{totals.kcal}</div><div className="nl">kcal</div></div>
                 <div className="nutcell"><div className="nv">{totals.sugar_g.toFixed(1)}g</div><div className="nl">sugar</div></div>
@@ -341,14 +396,14 @@ export default function Home() {
               <div className="ok">✓ every meal is within the limits set for your health.</div>
             </div>
             <div className="panel">
-              <h3>🛒 Grocery list</h3>
+              <h3>🛒 Grocery list <InfoTip text={nowSlot === "dinner" ? "Ingredients for your shown meals plus tomorrow's breakfast, so you can prep ahead tonight." : "Ingredients for your shown meals, de-duplicated into one shopping list."} /></h3>
               <div className="grocery">{grocery.map((g) => <span key={g} className="gitem">{g}</span>)}</div>
             </div>
           </div>
 
           <div className="panels">
             <div className="panel">
-              <h3>🛡 Kept out for your safety</h3>
+              <h3>🛡 Kept out for your safety <InfoTip text={"These dishes crossed a limit we track for you — e.g., sugar, sodium, potassium, texture, or an allergy — so deterministic safety rules (not the AI) kept them off your plan."} /></h3>
               {data.rejected.length === 0 && <div className="rej">Nothing was left out — everything fits your needs.</div>}
               {data.rejected.map((r) => (
                 <div className="rej" key={r.id}><div className="n">{r.name}{r.loved && <span className="loved">♥ a favorite</span>}</div><div className="v">{r.violations.join(" · ")}</div></div>
@@ -748,12 +803,16 @@ function EmergencyScreen({ profile, onClose, onSave, onReopen }: { profile: Prof
   );
 }
 
-// ---------------- hover info tooltip ----------------
+// ---------------- info popover (tap/hover) ----------------
 function InfoTip({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
   return (
-    <span className="infotip" tabIndex={0} role="button" aria-label="Why these meals were suggested">
+    <span className="infotip"
+      onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}
+      onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+      onBlur={() => setOpen(false)} tabIndex={0} role="button" aria-label="Why these meals were suggested">
       <span className="infotip-i">i</span>
-      <span className="infotip-pop">{text}</span>
+      {open && <span className="infotip-pop">{text}</span>}
     </span>
   );
 }

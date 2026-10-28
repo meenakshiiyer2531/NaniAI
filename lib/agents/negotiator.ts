@@ -36,9 +36,12 @@ function genericHealthScore(d: Dish): number {
 
 const isDessert = (d: Dish) => d.tags.includes("dessert");
 const isThin = (d: Dish) => d.tags.includes("soup") || d.tags.includes("liquid");
-/** A "main" is a substantial dish — not a dessert and not a thin soup/broth.
- *  Rasam or payasam should accompany a meal, never BE the whole meal. */
-const isMainDish = (d: Dish) => !isDessert(d) && !isThin(d);
+/** Accompaniments (dals, chutneys, raitas, sabzis, sambar/rasam…) and thin
+ *  broths are SIDES — they round out a plate but are never a standalone meal.
+ *  Tag-based so the catalog can grow without editing this file. */
+const isSideDish = (d: Dish) => d.tags.includes("accompaniment") || isThin(d);
+/** A "main" is a substantial dish — not a dessert, not a side/broth. */
+const isMainDish = (d: Dish) => !isDessert(d) && !isSideDish(d);
 
 /** Would main + side together still respect every per-meal cap + texture? */
 function plateFits(main: Dish, side: Dish, ctx: Ctx): boolean {
@@ -106,8 +109,7 @@ function pickForSlots(
     // only if the combined plate still fits every safety cap.
     if (slot === "lunch" || slot === "dinner") {
       const sideCandidates = compliantPool
-        .filter((d) => d.id !== dish.id && !used.has(d.id) && !isDessert(d))
-        .filter((d) => isThin(d) || d.tags.includes("vegetable") || d.tags.includes("lentil") || d.tags.includes("yogurt"))
+        .filter((d) => d.id !== dish.id && !used.has(d.id) && isSideDish(d))
         .sort(rank);
       const side = sideCandidates.find((s) => plateFits(dish, s, ctx));
       if (side) {

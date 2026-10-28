@@ -97,7 +97,7 @@ export const DISHES: Dish[] = [
     id: "sambar",
     name: "Sambar",
     cuisine: "South Indian",
-    tags: ["lentil", "tamarind", "vegetable", "soft", "savory", "staple"],
+    tags: ["accompaniment", "lentil", "tamarind", "vegetable", "soft", "savory", "staple"],
     ingredients: ["toor dal", "tamarind", "drumstick", "tomato", "sambar powder"],
     allergens: [],
     nutrition: { kcal: 95, sugar_g: 4, sodium_mg: 420, carbs_g: 14, potassium_mg: 380 },
@@ -121,7 +121,7 @@ export const DISHES: Dish[] = [
     id: "avial",
     name: "Avial",
     cuisine: "South Indian",
-    tags: ["vegetable", "coconut", "soft", "mild", "mixed-veg"],
+    tags: ["accompaniment", "vegetable", "coconut", "soft", "mild", "mixed-veg"],
     ingredients: ["mixed vegetables", "coconut", "yogurt", "curry leaf"],
     allergens: ["dairy"],
     nutrition: { kcal: 140, sugar_g: 5, sodium_mg: 260, carbs_g: 16, potassium_mg: 420 },
@@ -265,6 +265,32 @@ export const DISHES: Dish[] = [
     slots: ["dinner", "snack"],
     blurb: "A thin clear vegetable soup — safe, but generic.",
   },
+
+  // ---------- Accompaniments / sides (never a standalone meal) ----------
+  { id: "coconut_chutney", name: "Coconut Chutney", cuisine: "South Indian", tags: ["accompaniment", "coconut", "soft", "mild"], ingredients: ["coconut", "green chili", "ginger", "curry leaf"], allergens: [], nutrition: { kcal: 90, sugar_g: 1, sodium_mg: 120, carbs_g: 4, potassium_mg: 110 }, texture: 2, slots: ["breakfast", "lunch", "dinner"], blurb: "Fresh coconut chutney — the classic cooling side for idli and dosa." },
+  { id: "tomato_chutney", name: "Tomato Chutney", cuisine: "South Indian", tags: ["accompaniment", "tangy", "soft"], ingredients: ["tomato", "onion", "red chili", "tamarind"], allergens: [], nutrition: { kcal: 70, sugar_g: 3, sodium_mg: 160, carbs_g: 8, potassium_mg: 180 }, texture: 2, slots: ["breakfast", "lunch", "dinner"], blurb: "Tangy tomato chutney — a zingy side for tiffin." },
+  { id: "mint_chutney", name: "Mint-Coriander Chutney", cuisine: "North Indian", tags: ["accompaniment", "herb", "soft", "cooling"], ingredients: ["mint", "coriander", "green chili", "lemon"], allergens: [], nutrition: { kcal: 40, sugar_g: 1, sodium_mg: 150, carbs_g: 5, potassium_mg: 150 }, texture: 2, slots: ["breakfast", "lunch", "dinner"], blurb: "Bright mint-coriander chutney — fresh and low-calorie." },
+  { id: "toor_dal", name: "Toor Dal", cuisine: "South Indian", tags: ["accompaniment", "lentil", "soft", "protein"], ingredients: ["toor dal", "turmeric", "cumin", "curry leaf"], allergens: [], nutrition: { kcal: 120, sugar_g: 1, sodium_mg: 220, carbs_g: 16, potassium_mg: 200 }, texture: 3, slots: ["lunch", "dinner"], blurb: "Simple soft lentils — protein to round out a rice plate." },
+  { id: "dal_tadka", name: "Dal Tadka", cuisine: "North Indian", tags: ["accompaniment", "lentil", "soft", "comfort"], ingredients: ["toor dal", "onion", "tomato", "ghee", "cumin"], allergens: ["dairy"], nutrition: { kcal: 160, sugar_g: 2, sodium_mg: 320, carbs_g: 18, potassium_mg: 250 }, texture: 3, slots: ["lunch", "dinner"], blurb: "Tempered yellow dal — comforting protein for roti or rice." },
+  { id: "cucumber_raita", name: "Cucumber Raita", cuisine: "North Indian", tags: ["accompaniment", "yogurt", "cooling", "soft"], ingredients: ["yogurt", "cucumber", "cumin"], allergens: ["dairy"], nutrition: { kcal: 70, sugar_g: 4, sodium_mg: 180, carbs_g: 6, potassium_mg: 180 }, texture: 2, slots: ["lunch", "dinner"], blurb: "Cooling yogurt-and-cucumber side — soothing with spicy mains." },
+  { id: "mixed_veg_sabzi", name: "Mixed Vegetable Sabzi", cuisine: "North Indian", tags: ["accompaniment", "vegetable", "soft"], ingredients: ["mixed vegetables", "onion", "tomato", "turmeric"], allergens: [], nutrition: { kcal: 110, sugar_g: 5, sodium_mg: 300, carbs_g: 14, potassium_mg: 320 }, texture: 3, slots: ["lunch", "dinner"], blurb: "A soft everyday vegetable side." },
+  { id: "aloo_gobi", name: "Aloo Gobi", cuisine: "North Indian", tags: ["accompaniment", "vegetable", "potato", "soft"], ingredients: ["potato", "cauliflower", "turmeric", "cumin"], allergens: [], nutrition: { kcal: 140, sugar_g: 4, sodium_mg: 320, carbs_g: 20, potassium_mg: 380 }, texture: 3, slots: ["lunch", "dinner"], blurb: "Dry potato-cauliflower side — mild and homey." },
+  { id: "cabbage_poriyal", name: "Cabbage Poriyal", cuisine: "South Indian", tags: ["accompaniment", "vegetable", "coconut", "soft"], ingredients: ["cabbage", "coconut", "mustard seed", "curry leaf"], allergens: [], nutrition: { kcal: 90, sugar_g: 4, sodium_mg: 220, carbs_g: 10, potassium_mg: 200 }, texture: 3, slots: ["lunch", "dinner"], blurb: "Light stir-fried cabbage with coconut." },
+  { id: "beans_poriyal", name: "Beans Poriyal", cuisine: "South Indian", tags: ["accompaniment", "vegetable", "soft"], ingredients: ["green beans", "coconut", "mustard seed"], allergens: [], nutrition: { kcal: 95, sugar_g: 3, sodium_mg: 210, carbs_g: 11, potassium_mg: 230 }, texture: 3, slots: ["lunch", "dinner"], blurb: "Crisp-tender beans tempered with coconut." },
+  { id: "kootu", name: "Kootu", cuisine: "South Indian", tags: ["accompaniment", "lentil", "vegetable", "soft"], ingredients: ["moong dal", "bottle gourd", "coconut", "cumin"], allergens: [], nutrition: { kcal: 120, sugar_g: 3, sodium_mg: 240, carbs_g: 16, potassium_mg: 260 }, texture: 3, slots: ["lunch", "dinner"], blurb: "Soft lentil-and-vegetable side — gentle and nourishing." },
+  { id: "plain_curd", name: "Plain Curd", cuisine: "South Indian", tags: ["accompaniment", "yogurt", "cooling", "soft"], ingredients: ["yogurt"], allergens: ["dairy"], nutrition: { kcal: 80, sugar_g: 5, sodium_mg: 40, carbs_g: 6, potassium_mg: 200 }, texture: 1, slots: ["breakfast", "lunch", "dinner"], blurb: "A cooling spoon of curd to finish the plate." },
+
+  // ---------- More mains ----------
+  { id: "chapati", name: "Chapati", cuisine: "North Indian", tags: ["wheat", "flatbread", "soft", "staple"], ingredients: ["whole wheat flour", "water"], allergens: ["gluten"], nutrition: { kcal: 80, sugar_g: 0.5, sodium_mg: 120, carbs_g: 16, potassium_mg: 40 }, texture: 4, slots: ["lunch", "dinner"], blurb: "Soft whole-wheat flatbread — the everyday base for dal and sabzi." },
+  { id: "jeera_rice", name: "Jeera Rice", cuisine: "North Indian", tags: ["rice", "cumin", "soft", "mild"], ingredients: ["rice", "cumin", "ghee"], allergens: ["dairy"], nutrition: { kcal: 200, sugar_g: 0.5, sodium_mg: 180, carbs_g: 38, potassium_mg: 60 }, texture: 3, slots: ["lunch", "dinner"], blurb: "Fragrant cumin rice — a gentle base for dal or curry." },
+  { id: "rajma_chawal", name: "Rajma Chawal", cuisine: "North Indian", tags: ["rice", "kidney-bean", "protein", "comfort"], ingredients: ["kidney beans", "rice", "onion", "tomato"], allergens: [], nutrition: { kcal: 320, sugar_g: 4, sodium_mg: 420, carbs_g: 52, potassium_mg: 480 }, texture: 3, slots: ["lunch"], blurb: "Hearty kidney-bean curry over rice — classic comfort." },
+  { id: "chole", name: "Chole", cuisine: "North Indian", tags: ["chickpea", "protein", "savory"], ingredients: ["chickpeas", "onion", "tomato", "spices"], allergens: [], nutrition: { kcal: 250, sugar_g: 5, sodium_mg: 460, carbs_g: 34, potassium_mg: 520 }, texture: 3, slots: ["lunch", "dinner"], blurb: "Spiced chickpeas — protein-rich, pairs with rice or roti." },
+  { id: "veg_pulao", name: "Vegetable Pulao", cuisine: "North Indian", tags: ["rice", "vegetable", "mild", "soft"], ingredients: ["rice", "mixed vegetables", "whole spices"], allergens: [], nutrition: { kcal: 240, sugar_g: 4, sodium_mg: 300, carbs_g: 42, potassium_mg: 220 }, texture: 3, slots: ["lunch", "dinner"], blurb: "One-pot spiced rice with vegetables — a light full meal on its own." },
+  { id: "poha", name: "Poha", cuisine: "West Indian", tags: ["flattened-rice", "light", "soft", "breakfast-staple"], ingredients: ["flattened rice", "onion", "peanut", "turmeric"], allergens: ["peanut"], nutrition: { kcal: 180, sugar_g: 3, sodium_mg: 250, carbs_g: 32, potassium_mg: 120 }, texture: 3, slots: ["breakfast"], blurb: "Light flattened-rice breakfast — quick and easy to digest." },
+  { id: "upma", name: "Upma", cuisine: "South Indian", tags: ["semolina", "soft", "savory", "breakfast-staple"], ingredients: ["semolina", "onion", "carrot", "mustard seed"], allergens: ["gluten"], nutrition: { kcal: 190, sugar_g: 2, sodium_mg: 320, carbs_g: 30, potassium_mg: 110 }, texture: 3, slots: ["breakfast"], blurb: "Savory semolina breakfast — soft and warming." },
+  { id: "aloo_paratha", name: "Aloo Paratha", cuisine: "North Indian", tags: ["wheat", "potato", "griddled", "filling"], ingredients: ["whole wheat flour", "potato", "spices"], allergens: ["gluten"], nutrition: { kcal: 260, sugar_g: 2, sodium_mg: 360, carbs_g: 40, potassium_mg: 320 }, texture: 5, slots: ["breakfast", "lunch"], blurb: "Stuffed potato flatbread — filling; lovely with curd." },
+  { id: "set_dosa", name: "Set Dosa", cuisine: "South Indian", tags: ["fermented", "rice", "soft", "griddled"], ingredients: ["rice", "urad dal", "poha"], allergens: [], nutrition: { kcal: 150, sugar_g: 1, sodium_mg: 220, carbs_g: 28, potassium_mg: 90 }, texture: 3, slots: ["breakfast", "dinner"], blurb: "Soft, spongy stacked dosas — gentler than a crisp dosa." },
+  { id: "appam", name: "Appam", cuisine: "South Indian", tags: ["fermented", "rice", "coconut", "soft"], ingredients: ["rice", "coconut", "yeast"], allergens: [], nutrition: { kcal: 130, sugar_g: 2, sodium_mg: 160, carbs_g: 26, potassium_mg: 80 }, texture: 2, slots: ["breakfast", "dinner"], blurb: "Soft lacy rice-and-coconut hoppers — easy to chew." },
 ];
 
 export const DISHES_BY_ID: Record<string, Dish> = Object.fromEntries(
