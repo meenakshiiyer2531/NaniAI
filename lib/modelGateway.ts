@@ -127,6 +127,20 @@ export function activeProvider(): ModelProvider {
   return currentProvider();
 }
 
+/** Classify the configured endpoint's HOST so diagnostics are honest about
+ *  WHERE inference actually runs. This matters for the Nebius hackathon track:
+ *  NVIDIA's own API is NOT Nebius infrastructure. Never returns the key. */
+export function endpointInfo(): { host: string; infra: "nebius" | "nvidia-api" | "other" | "none" } {
+  const base = (process.env.LLM_BASE_URL ?? "").replace(/\/$/, "");
+  if (!base) return { host: "", infra: "none" };
+  let host = base;
+  try { host = new URL(base).host; } catch { /* keep raw */ }
+  let infra: "nebius" | "nvidia-api" | "other" = "other";
+  if (/nebius/i.test(host)) infra = "nebius";
+  else if (/integrate\.api\.nvidia\.com/i.test(host)) infra = "nvidia-api";
+  return { host, infra };
+}
+
 /** Server-only health probe for the configured LLM. Makes a tiny real request
  *  so a key/model can be validated without exposing secrets. */
 export async function modelHealthCheck(): Promise<{
@@ -134,10 +148,13 @@ export async function modelHealthCheck(): Promise<{
   configured: boolean;
   ok: boolean;
   detail: string;
+  host: string;
+  infra: "nebius" | "nvidia-api" | "other" | "none";
 }> {
   const provider = currentProvider();
+  const { host, infra } = endpointInfo();
   if (provider === "mock") {
-    return { provider, configured: false, ok: false, detail: "No LLM configured — running deterministic mock." };
+    return { provider, configured: false, ok: false, detail: "No LLM configured — running deterministic mock.", host, infra };
   }
   try {
     const r = await callOpenAICompatible({
@@ -146,8 +163,8 @@ export async function modelHealthCheck(): Promise<{
       mockText: "ok",
       maxTokens: 5,
     });
-    return { provider, configured: true, ok: true, detail: `Live: ${r.modelName} responded (${r.latencyMs}ms).` };
+    return { provider, configured: true, ok: true, detail: `Live: ${r.modelName} responded (${r.latencyMs}ms) via ${host || "?"}.`, host, infra };
   } catch (err) {
-    return { provider, configured: true, ok: false, detail: (err as Error).message };
+    return { provider, configured: true, ok: false, detail: (err as Error).message, host, infra };
   }
 }
