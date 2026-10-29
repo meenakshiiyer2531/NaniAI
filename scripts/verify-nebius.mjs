@@ -18,17 +18,26 @@
 // Required env: MODEL_PROVIDER=openai, LLM_BASE_URL (a Nebius host),
 //               LLM_API_KEY, LLM_MODEL (an NVIDIA open-source model Nebius serves).
 
-const provider = (process.env.MODEL_PROVIDER ?? "mock").toLowerCase();
-const base = (process.env.LLM_BASE_URL ?? "").replace(/\/$/, "");
-const key = process.env.LLM_API_KEY ?? "";
-const model = process.env.LLM_MODEL ?? "";
+// Required env (either the dedicated Nebius vars, or MODEL_PROVIDER=nebius):
+//   NEBIUS_API_KEY, NEBIUS_MODEL (an NVIDIA open-source model Nebius serves),
+//   NEBIUS_BASE_URL (optional; defaults to https://api.tokenfactory.nebius.com/v1)
+// Falls back to LLM_* only if NEBIUS_* are unset (so it still catches the
+// NVIDIA-API misconfiguration and fails).
+
+const nebKey = process.env.NEBIUS_API_KEY ?? "";
+const base = (nebKey ? (process.env.NEBIUS_BASE_URL ?? "https://api.tokenfactory.nebius.com/v1") : (process.env.LLM_BASE_URL ?? "")).replace(/\/$/, "");
+const key = nebKey || (process.env.LLM_API_KEY ?? "");
+const model = nebKey ? (process.env.NEBIUS_MODEL ?? "") : (process.env.LLM_MODEL ?? "");
+const provider = nebKey ? "nebius" : (process.env.MODEL_PROVIDER ?? "mock").toLowerCase();
 
 function fail(msg) { console.error("FAIL:", msg); process.exit(1); }
 
-if (provider !== "openai") fail(`MODEL_PROVIDER is "${provider}", not "openai" — this is the mock path, not live inference.`);
-if (!base) fail("LLM_BASE_URL is not set.");
-if (!key) fail("LLM_API_KEY is not set.");
-if (!model) fail("LLM_MODEL is not set.");
+if (!nebKey && provider !== "openai" && provider !== "nvidia" && provider !== "nebius") {
+  fail(`No Nebius config found. Set NEBIUS_API_KEY + NEBIUS_MODEL (and optionally NEBIUS_BASE_URL). Current MODEL_PROVIDER="${provider}".`);
+}
+if (!base) fail("No base URL resolved (set NEBIUS_BASE_URL or LLM_BASE_URL).");
+if (!key) fail("No API key resolved (set NEBIUS_API_KEY or LLM_API_KEY).");
+if (!model) fail("No model resolved (set NEBIUS_MODEL or LLM_MODEL).");
 
 let host = base;
 try { host = new URL(base).host; } catch { fail(`LLM_BASE_URL is not a valid URL: ${base}`); }

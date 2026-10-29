@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DISHES } from "@/lib/data/dishes";
 import { chat } from "@/lib/modelGateway";
+import { userOverrideFromRequest } from "@/lib/ai/userKey";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -131,7 +132,7 @@ export async function POST(req: NextRequest) {
         `Respect allergies and dislikes; tailor to their cuisines, lifestyle and cooking time.\n` : "") +
       `Conversation so far:\n${convo}\n\nAnswer the user's latest message.`;
 
-    const result = await chat({ system, user, mockText, maxTokens: 220 });
+    const result = await chat({ system, user, mockText, maxTokens: 220 }, await userOverrideFromRequest(req));
     // Strip markdown emphasis so plain-text bubbles never show stray * or _.
     const clean = result.text
       .replace(/\*\*(.*?)\*\*/g, "$1")

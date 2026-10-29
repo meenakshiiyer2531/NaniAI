@@ -251,8 +251,13 @@ export default function Home() {
     const callUser = userIdRef.current; // whose request this is
     setLoading(true); setError(""); setData(null); setSwapIdx({}); setExpanded({});
     try {
+      const headers: Record<string, string> = { "content-type": "application/json" };
+      // Attach the session token so the server can use THIS user's own API key
+      // (BYOK) if they configured one. Never exposes the key to the client.
+      const tok = supabase ? (await supabase.auth.getSession()).data.session?.access_token : null;
+      if (tok) headers.authorization = `Bearer ${tok}`;
       const res = await fetch("/api/plan", {
-        method: "POST", headers: { "content-type": "application/json" },
+        method: "POST", headers,
         body: JSON.stringify({ persona: profileToPersona(profile), day: nextDay }),
       });
       const json = await res.json();
@@ -638,6 +643,89 @@ const DIET = [
   { v: "egg", l: "Eggetarian" }, { v: "non_veg", l: "Non-vegetarian" }, { v: "other", l: "Other" },
 ];
 
+// Optional per-user BYOK: add/replace/remove your own NVIDIA API key. The key is
+// sent once over HTTPS to the server, encrypted at rest (AES-256-GCM), and NEVER
+// returned to the browser — only a masked "Configured ••••abcd" status comes back.
+function AiKeyManager({ compact }: { compact?: boolean }) {
+  const [status, setStatus] = useState<{ configured: boolean; last4: string | null; encryptionReady?: boolean } | null>(null);
+  const [val, setVal] = useState("");
+  const [show, setShow] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+
+  async function token(): Promise<string | null> {
+    const sb = supabaseConfigured() ? supabaseBrowser() : null;
+    if (!sb) return null;
+    const { data } = await sb.auth.getSession();
+    return data.session?.access_token ?? null;
+  }
+  async function load() {
+    const t = await token();
+    if (!t) return;
+    try {
+      const r = await fetch("/api/ai-key", { headers: { authorization: `Bearer ${t}` } });
+      if (r.ok) setStatus(await r.json());
+    } catch { /* non-fatal */ }
+  }
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+
+  async function save() {
+    setBusy(true); setMsg(""); setErr("");
+    try {
+      const t = await token();
+      if (!t) { setErr("Please sign in first."); return; }
+      const r = await fetch("/api/ai-key", { method: "POST", headers: { authorization: `Bearer ${t}`, "content-type": "application/json" }, body: JSON.stringify({ key: val }) });
+      const j = await r.json();
+      if (!r.ok) { setErr(j.error ?? "Could not save key."); return; }
+      setVal(""); setShow(false); setMsg("Saved. Your key is encrypted on the server."); setStatus({ configured: true, last4: j.last4, encryptionReady: true });
+    } catch { setErr("Could not save key."); }
+    finally { setBusy(false); }
+  }
+  async function remove() {
+    setBusy(true); setMsg(""); setErr("");
+    try {
+      const t = await token();
+      if (!t) { setErr("Please sign in first."); return; }
+      const r = await fetch("/api/ai-key", { method: "DELETE", headers: { authorization: `Bearer ${t}` } });
+      if (!r.ok) { const j = await r.json().catch(() => ({})); setErr(j.error ?? "Could not remove key."); return; }
+      setStatus({ configured: false, last4: null, encryptionReady: true }); setMsg("Removed. NaniAI will use the default AI.");
+    } catch { setErr("Could not remove key."); }
+    finally { setBusy(false); }
+  }
+
+  const unavailable = status?.encryptionReady === false;
+  return (
+    <div className="aikey">
+      <div className="aikey-head">
+        <b>Your NVIDIA API key</b> <span className="est-badge">optional</span>
+      </div>
+      <p className="ob-hint" style={{ marginTop: 0 }}>
+        NaniAI works out of the box with its built-in AI — you don&rsquo;t need a key. If you have
+        your own NVIDIA API key, add it to use it for your own meal explanations and chat. We encrypt
+        it on our server and never show it again.
+      </p>
+      {unavailable && <div className="err">⚠ Key storage isn&rsquo;t enabled on this deployment yet. You can still use the default AI.</div>}
+      {status?.configured
+        ? <div className="aikey-status">✓ Configured ••••{status.last4}
+            <button type="button" className="run ghost" disabled={busy} onClick={remove} style={{ marginLeft: 8 }}>Remove</button>
+          </div>
+        : <div className="aikey-status muted">Using NaniAI&rsquo;s default AI (no personal key set).</div>}
+      {!unavailable && (
+        <div className="dishadd" style={{ marginTop: 8 }}>
+          <input className="ob-input" type={show ? "text" : "password"} value={val} autoComplete="off"
+            onChange={(e) => setVal(e.target.value)} placeholder={status?.configured ? "enter a new key to replace" : "nvapi-…"} />
+          <button type="button" className="run ghost" onClick={() => setShow((s) => !s)}>{show ? "hide" : "show"}</button>
+          <button type="button" className="run" disabled={busy || val.trim().length < 8} onClick={save}>{busy ? "Saving…" : status?.configured ? "Replace" : "Save"}</button>
+        </div>
+      )}
+      {msg && <div className="ok" style={{ marginTop: 6 }}>{msg}</div>}
+      {err && <div className="err" style={{ marginTop: 6 }}>⚠ {err}</div>}
+      {!compact && <p className="est-note">Keys are stored encrypted (AES-256-GCM) and used only server-side. We never log or display your full key.</p>}
+    </div>
+  );
+}
+
 function Onboarding({ catalog, initial, onDone, onSignOut }: { catalog?: Catalog; initial: Profile; onDone: (p: Draft) => Promise<void>; onSignOut: () => void }) {
   const [step, setStep] = useState(0);
   const [d, setD] = useState<Draft>({
@@ -717,6 +805,8 @@ function Onboarding({ catalog, initial, onDone, onSignOut }: { catalog?: Catalog
         <input className="ob-input" value={d.emergency_name ?? ""} onChange={(e) => set({ emergency_name: e.target.value })} placeholder="Contact name (e.g. Priya, daughter)" />
         <input className="ob-input" style={{ marginTop: 8 }} value={d.emergency_phone ?? ""} onChange={(e) => set({ emergency_phone: e.target.value.replace(/[^\d+]/g, "") })} placeholder="+9198XXXXXXXX (with country code)" />
       </> },
+    { key: "aikey", required: false, bg: "bg-sun", q: "Bring your own AI key? (optional)", hint: "Totally optional — NaniAI already includes AI. Add your own NVIDIA API key only if you want to use it.",
+      body: <AiKeyManager compact /> },
   ];
 
   const cur = steps[step];
@@ -927,6 +1017,11 @@ function ProfilePage({ catalog, profile, onBack, onSave, onSignOut }: { catalog:
             <label>Phone (with country code)<input value={d.emergency_phone ?? ""} onChange={(e) => set({ emergency_phone: e.target.value.replace(/[^\d+]/g, "") })} placeholder="+9198XXXXXXXX" /></label>
           </div>
         </section>
+
+        <section className="pcard">
+          <h3>AI Provider &amp; API keys</h3>
+          <AiKeyManager />
+        </section>
       </div>
 
       <div className="cta sticky-save">
@@ -1029,7 +1124,10 @@ function ChatWidget({ profile }: { profile: any }) {
     const next = [...msgs, { role: "user" as const, content: q }];
     setMsgs(next); setInput(""); setBusy(true);
     try {
-      const res = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ messages: next, profile }) });
+      const chHeaders: Record<string, string> = { "content-type": "application/json" };
+      const chTok = supabaseConfigured() ? (await supabaseBrowser().auth.getSession()).data.session?.access_token : null;
+      if (chTok) chHeaders.authorization = `Bearer ${chTok}`;
+      const res = await fetch("/api/chat", { method: "POST", headers: chHeaders, body: JSON.stringify({ messages: next, profile }) });
       const j = await res.json();
       setMsgs((m) => [...m, { role: "assistant", content: j.reply ?? j.error ?? "Sorry, I couldn't answer that." }]);
     } catch { setMsgs((m) => [...m, { role: "assistant", content: "I'm having trouble connecting right now. Please try again." }]); }

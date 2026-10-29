@@ -4,6 +4,7 @@ import { getPersona } from "@/lib/data/personas";
 import { DISHES, DISHES_BY_ID } from "@/lib/data/dishes";
 import { deriveConstraints, checkDish } from "@/lib/agents/clinician";
 import { runComparison } from "@/lib/agents/orchestrator";
+import { userOverrideFromRequest } from "@/lib/ai/userKey";
 import { specialistSuggestions, buildIceCard, EMERGENCY_SCENARIOS } from "@/lib/care";
 
 export const runtime = "nodejs";
@@ -125,7 +126,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const comparison = await runComparison(persona, day);
+    const comparison = await runComparison(persona, day, await userOverrideFromRequest(req));
 
     const constraints = deriveConstraints(persona);
     const rejected = DISHES.map((d) => ({ dish: d, result: checkDish(d, constraints) }))

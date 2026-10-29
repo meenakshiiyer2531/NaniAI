@@ -15,7 +15,7 @@ import { getDish, DISHES } from "@/lib/data/dishes";
 import { checkDish } from "@/lib/agents/clinician";
 import { familiarityOf } from "@/lib/agents/culture";
 import { overlap } from "@/lib/qloo/mock";
-import { chat } from "@/lib/modelGateway";
+import { chat, type EndpointOverride } from "@/lib/modelGateway";
 
 const SLOTS: MealSlot[] = ["breakfast", "lunch", "dinner", "snack"];
 
@@ -301,6 +301,7 @@ async function narrate(
   items: PlanItem[],
   subs: Substitution[],
   mode: PlanMode,
+  modelOverride?: EndpointOverride,
 ) {
   const planText = items.map((i) => `${i.slot}: ${i.dish.name}`).join(", ");
   const subText = subs
@@ -330,7 +331,7 @@ async function narrate(
 
   // Language reasoning flows through the provider-neutral model gateway (real
   // NVIDIA open model when configured, deterministic mock otherwise).
-  const detail = await chat({ system, user, mockText, maxTokens: 300 });
+  const detail = await chat({ system, user, mockText, maxTokens: 300 }, modelOverride);
   return detail;
 }
 
@@ -341,6 +342,7 @@ export async function negotiate(
   affById: Map<string, Affinity>,
   mode: PlanMode,
   day = 0,
+  modelOverride?: EndpointOverride,
 ): Promise<PlanResponse> {
   const compById = new Map<string, ComplianceResult>(
     DISHES.map((d) => [d.id, checkDish(d, constraints)]),
@@ -376,7 +378,7 @@ export async function negotiate(
       ? 0
       : Math.round(items.reduce((s, i) => s + i.familiarity, 0) / items.length);
 
-  const narration = await narrate(ctx, items, subs, mode);
+  const narration = await narrate(ctx, items, subs, mode, modelOverride);
 
   const plan: Plan = {
     items,

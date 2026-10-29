@@ -1782,3 +1782,9 @@ button:focus-visible, input:focus-visible, a:focus-visible, .infotip:focus-visib
 .tbadge.cat { background: var(--teal-soft); color: var(--teal); }
 .tbadge.custom { background: var(--saffron-soft); color: var(--saffron); }
 .tsearch-note { font-size: 12px; color: var(--text-faint); }
+
+/* BYOK AI-key manager */
+.aikey { display: flex; flex-direction: column; gap: 4px; }
+.aikey-head { font-size: 14px; }
+.aikey-status { font-size: 13px; color: var(--text-dim); margin-top: 4px; }
+.aikey-status.muted { color: var(--text-faint); }

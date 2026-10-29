@@ -27,6 +27,7 @@ reads/writes/deletes fail.
    - `supabase/migrations/0001_init.sql`
    - `supabase/migrations/0002_meal_prep.sql`
    - `supabase/migrations/0003_profile_feedback.sql`
+   - `supabase/migrations/0004_user_api_keys.sql`
    (e.g. paste into the Supabase SQL editor, or `psql "$STAGING_POSTGRES_URL" -f <file>`.)
 3. In **Authentication → Providers → Email**, disable "Confirm email" (or leave on;
    the script uses the admin API with `email_confirm: true`, so either works).

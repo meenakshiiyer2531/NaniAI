@@ -138,6 +138,22 @@ async function main() {
     const aInsBProf = await aClient.from("profiles").insert({ id: bId, preferred_name: "spoof" }).select("*");
     check("6. A cannot insert a profile row for B", deniedWrite(aInsBProf));
 
+    // 6b. user_api_keys (BYOK) cross-account isolation. We store a dummy
+    // ciphertext row as each user (encryption itself is tested separately); here
+    // we only assert RLS prevents one user touching another's key row.
+    await aClient.from("user_api_keys").upsert({ user_id: aId, provider: "nvidia", ciphertext: "A-cipher", iv: "iv", auth_tag: "tag", last4: "aaaa" }, { onConflict: "user_id" });
+    await bClient.from("user_api_keys").upsert({ user_id: bId, provider: "nvidia", ciphertext: "B-cipher", iv: "iv", auth_tag: "tag", last4: "bbbb" }, { onConflict: "user_id" });
+    const aOwnKey = await aClient.from("user_api_keys").select("last4").eq("user_id", aId).maybeSingle();
+    check("6b. A can read its own api key row", aOwnKey.data?.last4 === "aaaa");
+    const aReadBKey = await aClient.from("user_api_keys").select("*").eq("user_id", bId);
+    check("6b. A cannot read B's api key", deniedRead(aReadBKey), `rows=${aReadBKey.data?.length}`);
+    const aUpdBKey = await aClient.from("user_api_keys").update({ ciphertext: "HACK" }).eq("user_id", bId).select("*");
+    check("6b. A cannot replace B's api key", deniedWrite(aUpdBKey));
+    const aDelBKey = await aClient.from("user_api_keys").delete().eq("user_id", bId).select("*");
+    check("6b. A cannot delete B's api key", deniedWrite(aDelBKey));
+    const bKeyAfter = await bClient.from("user_api_keys").select("ciphertext,last4").eq("user_id", bId).maybeSingle();
+    check("6b. B's api key intact after A's attempts", bKeyAfter.data?.last4 === "bbbb" && bKeyAfter.data?.ciphertext === "B-cipher");
+
     // 7. unauthenticated requests cannot read or write
     const noauth = anonClient();
     const anonReadProf = await noauth.from("profiles").select("*");
@@ -146,6 +162,8 @@ async function main() {
     check("7. unauthenticated meal_prep read returns nothing", deniedRead(anonReadPrep), `rows=${anonReadPrep.data?.length}`);
     const anonWrite = await noauth.from("profiles").insert({ id: aId, preferred_name: "anon" }).select("*");
     check("7. unauthenticated write is rejected", deniedWrite(anonWrite));
+    const anonReadKeys = await noauth.from("user_api_keys").select("*");
+    check("7. unauthenticated api-key read returns nothing", deniedRead(anonReadKeys), `rows=${anonReadKeys.data?.length}`);
   } finally {
     // teardown — delete both accounts (cascade removes their rows)
     for (const id of [aId, bId]) if (id) { const { error } = await admin.auth.admin.deleteUser(id); console.log(`cleanup ${id}: ${error ? "FAILED " + error.message : "deleted"}`); }

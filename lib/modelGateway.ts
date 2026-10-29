@@ -25,6 +25,8 @@ export interface ModelResult {
   estCostUsd: number | null;
   tokensIn?: number;
   tokensOut?: number;
+  /** Which real provider served this ("nvidia"/"nebius"), or the fallback path. */
+  source?: "nvidia" | "nebius" | "fallback";
 }
 
 export interface ChatRequest {
@@ -35,10 +37,46 @@ export interface ChatRequest {
   maxTokens?: number;
 }
 
+type ProviderSource = "nvidia" | "nebius" | "none";
+
+interface ResolvedEndpoint {
+  base: string;
+  key: string;
+  model: string;
+  source: ProviderSource;
+}
+
+/** Explicit, owner-configured provider selection (never guessed from a model
+ *  name). Precedence:
+ *   - MODEL_PROVIDER=nebius        -> Nebius Token Factory (NEBIUS_* vars)
+ *   - MODEL_PROVIDER=nvidia|openai -> the default NVIDIA/OpenAI-compatible path (LLM_* vars)
+ *   - MODEL_PROVIDER=mock          -> deterministic mock
+ *   - unset -> auto: Nebius if its key+model are set, else the NVIDIA path if
+ *             configured, else mock. This keeps end users key-free whenever the
+ *             deployment owner has configured ANY provider. */
+function resolveEndpoint(): ResolvedEndpoint {
+  const explicit = (process.env.MODEL_PROVIDER ?? "").toLowerCase();
+  const neb = {
+    base: (process.env.NEBIUS_BASE_URL ?? "https://api.tokenfactory.nebius.com/v1").replace(/\/$/, ""),
+    key: process.env.NEBIUS_API_KEY ?? "",
+    model: process.env.NEBIUS_MODEL ?? "",
+  };
+  const nv = {
+    base: (process.env.LLM_BASE_URL ?? "").replace(/\/$/, ""),
+    key: process.env.LLM_API_KEY ?? "",
+    model: process.env.LLM_MODEL ?? "",
+  };
+  if (explicit === "mock") return { base: "", key: "", model: "", source: "none" };
+  if (explicit === "nebius") return { ...neb, source: "nebius" };
+  if (explicit === "nvidia" || explicit === "openai") return { ...nv, source: "nvidia" };
+  // auto-detect when MODEL_PROVIDER is unset
+  if (neb.key && neb.model) return { ...neb, source: "nebius" };
+  if (nv.key && nv.base && nv.model) return { ...nv, source: "nvidia" };
+  return { base: "", key: "", model: "", source: "none" };
+}
+
 function currentProvider(): ModelProvider {
-  const p = (process.env.MODEL_PROVIDER ?? "mock").toLowerCase();
-  if (p === "openai") return p;
-  return "mock";
+  return resolveEndpoint().source === "none" ? "mock" : "openai";
 }
 
 /** Optional, documented price estimate (USD per 1M tokens). Only emitted when
@@ -50,13 +88,33 @@ function estCost(tin: number, tout: number): number | null {
   return +(((tin * pin) / 1_000_000 + (tout * pout) / 1_000_000)).toFixed(6);
 }
 
-async function callOpenAICompatible(req: ChatRequest): Promise<ModelResult> {
-  const key = process.env.LLM_API_KEY ?? "";
-  const base = (process.env.LLM_BASE_URL ?? "").replace(/\/$/, "");
-  const model = process.env.LLM_MODEL ?? "";
-  if (!key) throw new Error("LLM_API_KEY not set");
-  if (!base) throw new Error("LLM_BASE_URL not set");
-  if (!model) throw new Error("LLM_MODEL not set");
+/** A per-request endpoint override — used to run inference with a specific
+ *  USER's own API key (BYOK) instead of the deployment default. The key is
+ *  passed in-memory for this request only; it is never stored or logged here. */
+export interface EndpointOverride {
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  source: "nvidia" | "nebius";
+}
+
+async function callOpenAICompatible(req: ChatRequest, override?: EndpointOverride): Promise<ModelResult> {
+  let base: string, key: string, model: string, source: "nvidia" | "nebius";
+  if (override?.apiKey) {
+    base = override.baseUrl.replace(/\/$/, "");
+    key = override.apiKey;
+    model = override.model;
+    source = override.source;
+    if (!base) throw new Error("override base URL not set");
+    if (!model) throw new Error("override model not set");
+  } else {
+    const r = resolveEndpoint();
+    if (r.source === "none") throw new Error("No provider configured (set MODEL_PROVIDER + NEBIUS_* or LLM_*)");
+    if (!r.key) throw new Error(`${r.source.toUpperCase()} API key not set`);
+    if (!r.base) throw new Error(`${r.source.toUpperCase()} base URL not set`);
+    if (!r.model) throw new Error(`${r.source.toUpperCase()} model not set`);
+    base = r.base; key = r.key; model = r.model; source = r.source;
+  }
 
   const start = Date.now();
   const ctrl = new AbortController();
@@ -89,6 +147,7 @@ async function callOpenAICompatible(req: ChatRequest): Promise<ModelResult> {
       estCostUsd: estCost(tin, tout),
       tokensIn: tin,
       tokensOut: tout,
+      source,
     };
   } finally {
     clearTimeout(t);
@@ -100,11 +159,11 @@ async function callOpenAICompatible(req: ChatRequest): Promise<ModelResult> {
  * deterministic mock text if the provider is `mock` OR a live call fails — so a
  * missing/broken endpoint degrades gracefully instead of breaking the app.
  */
-export async function chat(req: ChatRequest): Promise<ModelResult> {
-  const provider = currentProvider();
+export async function chat(req: ChatRequest, override?: EndpointOverride): Promise<ModelResult> {
+  const live = !!override?.apiKey || currentProvider() === "openai";
   const start = Date.now();
   try {
-    if (provider === "openai") return await callOpenAICompatible(req);
+    if (live) return await callOpenAICompatible(req, override);
   } catch (err) {
     return {
       text: req.mockText,
@@ -112,6 +171,7 @@ export async function chat(req: ChatRequest): Promise<ModelResult> {
       modelName: `mock (fallback: ${(err as Error).message.slice(0, 70)})`,
       latencyMs: Date.now() - start,
       estCostUsd: 0,
+      source: "fallback",
     };
   }
   return {
@@ -120,6 +180,7 @@ export async function chat(req: ChatRequest): Promise<ModelResult> {
     modelName: "deterministic-mock",
     latencyMs: Date.now() - start,
     estCostUsd: 0,
+    source: "fallback",
   };
 }
 
@@ -127,18 +188,30 @@ export function activeProvider(): ModelProvider {
   return currentProvider();
 }
 
+/** Build an override that runs inference with a USER's own NVIDIA key, using the
+ *  deployment's NVIDIA base URL + model defaults (falling back to NVIDIA's public
+ *  API host). The key is used for this request only — never persisted here. */
+export function nvidiaUserOverride(apiKey: string): EndpointOverride {
+  return {
+    apiKey,
+    baseUrl: (process.env.LLM_BASE_URL ?? "https://integrate.api.nvidia.com/v1").replace(/\/$/, ""),
+    model: process.env.LLM_MODEL ?? "nvidia/llama-3.1-nemotron-70b-instruct",
+    source: "nvidia",
+  };
+}
+
 /** Classify the configured endpoint's HOST so diagnostics are honest about
  *  WHERE inference actually runs. This matters for the Nebius hackathon track:
  *  NVIDIA's own API is NOT Nebius infrastructure. Never returns the key. */
-export function endpointInfo(): { host: string; infra: "nebius" | "nvidia-api" | "other" | "none" } {
-  const base = (process.env.LLM_BASE_URL ?? "").replace(/\/$/, "");
-  if (!base) return { host: "", infra: "none" };
+export function endpointInfo(): { host: string; infra: "nebius" | "nvidia-api" | "other" | "none"; source: ProviderSource; model: string } {
+  const { base, model, source } = resolveEndpoint();
+  if (source === "none" || !base) return { host: "", infra: "none", source, model: "" };
   let host = base;
   try { host = new URL(base).host; } catch { /* keep raw */ }
   let infra: "nebius" | "nvidia-api" | "other" = "other";
   if (/nebius/i.test(host)) infra = "nebius";
   else if (/integrate\.api\.nvidia\.com/i.test(host)) infra = "nvidia-api";
-  return { host, infra };
+  return { host, infra, source, model };
 }
 
 /** Server-only health probe for the configured LLM. Makes a tiny real request
@@ -150,11 +223,13 @@ export async function modelHealthCheck(): Promise<{
   detail: string;
   host: string;
   infra: "nebius" | "nvidia-api" | "other" | "none";
+  source: ProviderSource;
+  model: string;
 }> {
   const provider = currentProvider();
-  const { host, infra } = endpointInfo();
+  const { host, infra, source, model } = endpointInfo();
   if (provider === "mock") {
-    return { provider, configured: false, ok: false, detail: "No LLM configured — running deterministic mock.", host, infra };
+    return { provider, configured: false, ok: false, detail: "No provider configured — running deterministic mock.", host, infra, source, model };
   }
   try {
     const r = await callOpenAICompatible({
@@ -163,8 +238,8 @@ export async function modelHealthCheck(): Promise<{
       mockText: "ok",
       maxTokens: 5,
     });
-    return { provider, configured: true, ok: true, detail: `Live: ${r.modelName} responded (${r.latencyMs}ms) via ${host || "?"}.`, host, infra };
+    return { provider, configured: true, ok: true, detail: `Live: ${r.modelName} responded (${r.latencyMs}ms) via ${host || "?"} [${source}].`, host, infra, source, model };
   } catch (err) {
-    return { provider, configured: true, ok: false, detail: (err as Error).message, host, infra };
+    return { provider, configured: true, ok: false, detail: (err as Error).message, host, infra, source, model };
   }
 }
