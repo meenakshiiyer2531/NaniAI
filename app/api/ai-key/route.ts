@@ -18,7 +18,7 @@ export async function GET(req: Request) {
   if (!authed) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { data, error } = await authed.supabase
     .from(TABLE)
-    .select("provider,last4,updated_at")
+    .select("provider,last4,model,updated_at")
     .eq("user_id", authed.userId)
     .maybeSingle();
   if (error) return NextResponse.json({ error: "lookup failed" }, { status: 500 });
@@ -26,12 +26,13 @@ export async function GET(req: Request) {
     configured: !!data,
     provider: data?.provider ?? "nvidia",
     last4: data?.last4 ?? null,
+    model: data?.model ?? null,
     updatedAt: data?.updated_at ?? null,
     encryptionReady: encryptionConfigured(),
   });
 }
 
-/** POST { key } — validate, encrypt, store. Never echoes the key. */
+/** POST { key, provider?, model? } — validate, encrypt, store. Never echoes the key. */
 export async function POST(req: Request) {
   const authed = await authedClientFromRequest(req);
   if (!authed) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -47,7 +48,8 @@ export async function POST(req: Request) {
   let body: any;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "invalid body" }, { status: 400 }); }
   const key = typeof body?.key === "string" ? body.key.trim() : "";
-  const provider = body?.provider === "nvidia" ? "nvidia" : "nvidia"; // only NVIDIA BYOK for now
+  const provider = body?.provider === "nebius" ? "nebius" : "nvidia";
+  const model = typeof body?.model === "string" ? body.model.trim().slice(0, 120) : "";
   if (key.length < 8 || key.length > 400) {
     return NextResponse.json({ error: "That doesn't look like a valid API key." }, { status: 400 });
   }
@@ -59,6 +61,7 @@ export async function POST(req: Request) {
     {
       user_id: authed.userId,
       provider,
+      model: model || null,
       ciphertext: sealed.ciphertext,
       iv: sealed.iv,
       auth_tag: sealed.tag,
@@ -68,7 +71,7 @@ export async function POST(req: Request) {
     { onConflict: "user_id" },
   );
   if (error) return NextResponse.json({ error: "could not save key" }, { status: 500 });
-  return NextResponse.json({ configured: true, provider, last4: last4(key) });
+  return NextResponse.json({ configured: true, provider, model: model || null, last4: last4(key) });
 }
 
 /** DELETE — remove the user's key. */

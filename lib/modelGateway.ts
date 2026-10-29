@@ -205,6 +205,19 @@ export function nvidiaUserOverride(apiKey: string): EndpointOverride {
   };
 }
 
+/** Build an override that runs inference with a USER's own Nebius Token Factory
+ *  key — this makes THAT user's requests run on Nebius infrastructure. The model
+ *  must be an NVIDIA open model that Token Factory serves (user-supplied, or the
+ *  deployment's NEBIUS_MODEL default). The key is used for this request only. */
+export function nebiusUserOverride(apiKey: string, model?: string): EndpointOverride {
+  return {
+    apiKey,
+    baseUrl: (process.env.NEBIUS_BASE_URL ?? "https://api.tokenfactory.nebius.com/v1").replace(/\/$/, ""),
+    model: (model && model.trim()) || process.env.NEBIUS_MODEL || "nvidia/llama-3.1-nemotron-70b-instruct",
+    source: "nebius",
+  };
+}
+
 /** Classify the configured endpoint's HOST so diagnostics are honest about
  *  WHERE inference actually runs. This matters for the Nebius hackathon track:
  *  NVIDIA's own API is NOT Nebius infrastructure. Never returns the key. */

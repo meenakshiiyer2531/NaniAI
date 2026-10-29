@@ -643,12 +643,15 @@ const DIET = [
   { v: "egg", l: "Eggetarian" }, { v: "non_veg", l: "Non-vegetarian" }, { v: "other", l: "Other" },
 ];
 
-// Optional per-user BYOK: add/replace/remove your own NVIDIA API key. The key is
-// sent once over HTTPS to the server, encrypted at rest (AES-256-GCM), and NEVER
+// Optional per-user BYOK: add/replace/remove your own NVIDIA or Nebius API key.
+// The key is sent once over HTTPS, encrypted at rest (AES-256-GCM), and NEVER
 // returned to the browser — only a masked "Configured ••••abcd" status comes back.
+// A Nebius key routes the user's requests through Nebius Token Factory.
 function AiKeyManager({ compact }: { compact?: boolean }) {
-  const [status, setStatus] = useState<{ configured: boolean; last4: string | null; encryptionReady?: boolean } | null>(null);
+  const [status, setStatus] = useState<{ configured: boolean; last4: string | null; provider?: string; model?: string | null; encryptionReady?: boolean } | null>(null);
+  const [provider, setProvider] = useState<"nvidia" | "nebius">("nvidia");
   const [val, setVal] = useState("");
+  const [model, setModel] = useState("");
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -665,7 +668,7 @@ function AiKeyManager({ compact }: { compact?: boolean }) {
     if (!t) return;
     try {
       const r = await fetch("/api/ai-key", { headers: { authorization: `Bearer ${t}` } });
-      if (r.ok) setStatus(await r.json());
+      if (r.ok) { const j = await r.json(); setStatus(j); if (j.provider) setProvider(j.provider); }
     } catch { /* non-fatal */ }
   }
   useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
@@ -675,10 +678,10 @@ function AiKeyManager({ compact }: { compact?: boolean }) {
     try {
       const t = await token();
       if (!t) { setErr("Please sign in first."); return; }
-      const r = await fetch("/api/ai-key", { method: "POST", headers: { authorization: `Bearer ${t}`, "content-type": "application/json" }, body: JSON.stringify({ key: val }) });
+      const r = await fetch("/api/ai-key", { method: "POST", headers: { authorization: `Bearer ${t}`, "content-type": "application/json" }, body: JSON.stringify({ key: val, provider, model: provider === "nebius" ? model : undefined }) });
       const j = await r.json();
       if (!r.ok) { setErr(j.error ?? "Could not save key."); return; }
-      setVal(""); setShow(false); setMsg("Saved. Your key is encrypted on the server."); setStatus({ configured: true, last4: j.last4, encryptionReady: true });
+      setVal(""); setShow(false); setMsg(`Saved. Your ${provider === "nebius" ? "Nebius" : "NVIDIA"} key is encrypted on the server.`); setStatus({ configured: true, last4: j.last4, provider: j.provider, model: j.model, encryptionReady: true });
     } catch { setErr("Could not save key."); }
     finally { setBusy(false); }
   }
@@ -698,26 +701,36 @@ function AiKeyManager({ compact }: { compact?: boolean }) {
   return (
     <div className="aikey">
       <div className="aikey-head">
-        <b>Your NVIDIA API key</b> <span className="est-badge">optional</span>
+        <b>Your AI provider key</b> <span className="est-badge">optional</span>
       </div>
       <p className="ob-hint" style={{ marginTop: 0 }}>
-        NaniAI works out of the box with its built-in AI — you don&rsquo;t need a key. If you have
-        your own NVIDIA API key, add it to use it for your own meal explanations and chat. We encrypt
-        it on our server and never show it again.
+        NaniAI works out of the box with its built-in AI — you don&rsquo;t need a key. Add your own
+        key to use it instead: an <b>NVIDIA</b> key, or a <b>Nebius Token Factory</b> key (which runs
+        your requests on Nebius). We encrypt it on our server and never show it again.
       </p>
       {unavailable && <div className="err">⚠ Key storage isn&rsquo;t enabled on this deployment yet. You can still use the default AI.</div>}
       {status?.configured
-        ? <div className="aikey-status">✓ Configured ••••{status.last4}
+        ? <div className="aikey-status">✓ Configured ••••{status.last4} <span className="est-badge">{status.provider === "nebius" ? "Nebius" : "NVIDIA"}</span>
             <button type="button" className="run ghost" disabled={busy} onClick={remove} style={{ marginLeft: 8 }}>Remove</button>
           </div>
         : <div className="aikey-status muted">Using NaniAI&rsquo;s default AI (no personal key set).</div>}
       {!unavailable && (
-        <div className="dishadd" style={{ marginTop: 8 }}>
-          <input className="ob-input" type={show ? "text" : "password"} value={val} autoComplete="off"
-            onChange={(e) => setVal(e.target.value)} placeholder={status?.configured ? "enter a new key to replace" : "nvapi-…"} />
-          <button type="button" className="run ghost" onClick={() => setShow((s) => !s)}>{show ? "hide" : "show"}</button>
-          <button type="button" className="run" disabled={busy || val.trim().length < 8} onClick={save}>{busy ? "Saving…" : status?.configured ? "Replace" : "Save"}</button>
-        </div>
+        <>
+          <div className="checks" style={{ marginTop: 8 }}>
+            <button type="button" className={`check ${provider === "nvidia" ? "on" : ""}`} onClick={() => setProvider("nvidia")}>NVIDIA API</button>
+            <button type="button" className={`check ${provider === "nebius" ? "on" : ""}`} onClick={() => setProvider("nebius")}>Nebius Token Factory</button>
+          </div>
+          {provider === "nebius" && (
+            <input className="ob-input" style={{ marginTop: 8 }} value={model} onChange={(e) => setModel(e.target.value)}
+              placeholder="Nebius model id (optional, e.g. an NVIDIA model Token Factory serves)" />
+          )}
+          <div className="dishadd" style={{ marginTop: 8 }}>
+            <input className="ob-input" type={show ? "text" : "password"} value={val} autoComplete="off"
+              onChange={(e) => setVal(e.target.value)} placeholder={status?.configured ? "enter a new key to replace" : provider === "nebius" ? "your Nebius API key" : "nvapi-…"} />
+            <button type="button" className="run ghost" onClick={() => setShow((s) => !s)}>{show ? "hide" : "show"}</button>
+            <button type="button" className="run" disabled={busy || val.trim().length < 8} onClick={save}>{busy ? "Saving…" : status?.configured ? "Replace" : "Save"}</button>
+          </div>
+        </>
       )}
       {msg && <div className="ok" style={{ marginTop: 6 }}>{msg}</div>}
       {err && <div className="err" style={{ marginTop: 6 }}>⚠ {err}</div>}
@@ -805,7 +818,7 @@ function Onboarding({ catalog, initial, onDone, onSignOut }: { catalog?: Catalog
         <input className="ob-input" value={d.emergency_name ?? ""} onChange={(e) => set({ emergency_name: e.target.value })} placeholder="Contact name (e.g. Priya, daughter)" />
         <input className="ob-input" style={{ marginTop: 8 }} value={d.emergency_phone ?? ""} onChange={(e) => set({ emergency_phone: e.target.value.replace(/[^\d+]/g, "") })} placeholder="+9198XXXXXXXX (with country code)" />
       </> },
-    { key: "aikey", required: false, bg: "bg-sun", q: "Bring your own AI key? (optional)", hint: "Totally optional — NaniAI already includes AI. Add your own NVIDIA API key only if you want to use it.",
+    { key: "aikey", required: false, bg: "bg-sun", q: "Bring your own AI key? (optional)", hint: "Totally optional — NaniAI already includes AI. Add your own NVIDIA or Nebius key only if you want to use it.",
       body: <AiKeyManager compact /> },
   ];
 
