@@ -1,0 +1,72 @@
+name: CI
+
+# Runs the fast correctness checks plus the cross-account isolation regression.
+# SAFETY: the isolation suite mocks ALL Supabase auth + REST calls with synthetic
+# fixtures (see tests/account-isolation.mjs) and uses the deterministic keyless
+# /api/plan — it never contacts the real Supabase project and needs no secrets.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Avoid piling up redundant runs on rapid pushes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Type-check, unit evals & account-isolation E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Keep the app in deterministic, keyless mock mode. These are NON-secret
+      # placeholders that only make supabaseConfigured() true so the auth UI
+      # renders; every Supabase request is intercepted by the test. No real
+      # project, no service-role key, no production secret is used in CI.
+      NEXT_PUBLIC_SUPABASE_URL: https://ci-mock.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-mock-anon-key
+      MODEL_PROVIDER: mock
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Scheduling tests
+        run: npm run test:schedule
+
+      - name: Evaluation (safety gate — expect 0 violations)
+        run: npm run eval
+
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Build
+        run: npm run build
+
+      - name: Cross-account isolation regression
+        run: npm run test:isolation
+
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: isolation-failure-artifacts
+          path: |
+            test-results/
+            tests/.artifacts/
+          if-no-files-found: ignore
+          retention-days: 7

@@ -609,6 +609,33 @@ button.run.ghost {
   padding: 4px 8px;
   color: var(--text-dim);
 }
+.nut span.nut-est {
+  background: transparent;
+  border: 1px dashed var(--text-faint);
+  color: var(--text-faint);
+  font-style: italic;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 10px;
+}
+.est-badge {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+  background: var(--bg-elev2);
+  border: 1px dashed var(--text-faint);
+  border-radius: 6px;
+  padding: 1px 6px;
+  vertical-align: middle;
+}
+.est-note {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-top: 6px;
+  font-style: italic;
+}
 .recipe-h {
   font-size: 11px;
   text-transform: uppercase;

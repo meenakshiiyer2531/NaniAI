@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { buildRecipe, portionOf, prepTipFor } from "@/lib/recipes";
 import { dayTotals } from "@/lib/nutrition";
@@ -433,6 +433,7 @@ export default function Home() {
                         ))}
                       </div>
                       <div className="nut">
+                        <span className="nut-est">Estimated</span>
                         <span>{sum("kcal")} kcal</span>
                         <span>{sum("sugar_g").toFixed(1)}g sugar</span>
                         <span>{sum("sodium_mg")}mg sodium</span>
@@ -511,7 +512,7 @@ export default function Home() {
 
           <div className="panels">
             <div className="panel">
-              <h3>📊 Today&rsquo;s nutrition <InfoTip text={`Combined totals for your shown meals${showFullDay ? "" : " (just your " + nowSlot + ")"}. Every dish was checked against your per-meal limits before it was suggested, so these stay in a safe range for you.`} /></h3>
+              <h3>📊 Today&rsquo;s nutrition <span className="est-badge">estimated</span> <InfoTip text={`Combined totals for your shown meals${showFullDay ? "" : " (just your " + nowSlot + ")"}. These are approximate estimates from a curated reference, not lab-measured values — use them as guidance, not exact figures. Every dish was still checked against your per-meal limits before it was suggested.`} /></h3>
               <div className="nutgrid">
                 <div className="nutcell"><div className="nv">{totals.kcal}</div><div className="nl">kcal</div></div>
                 <div className="nutcell"><div className="nv">{totals.sugar_g.toFixed(1)}g</div><div className="nl">sugar</div></div>
@@ -519,6 +520,7 @@ export default function Home() {
                 <div className="nutcell"><div className="nv">{totals.carbs_g}g</div><div className="nl">carbs</div></div>
               </div>
               <div className="ok">✓ every meal is within the limits set for your health.</div>
+              <div className="est-note">Nutrition figures are approximate estimates for guidance, not medical or lab-verified values.</div>
             </div>
             <div className="panel">
               <h3>🛒 Grocery list <InfoTip text={"Ingredients for the meal you're having now plus what you'll prep for your next meal, merged into one shopping list."} /></h3>
@@ -757,6 +759,7 @@ function SearchMultiRemote({ type, selected, onToggle, placeholder }: { type: "c
   const [results, setResults] = useState<string[]>([]);
   const [state, setState] = useState<"idle" | "loading" | "error">("idle");
   const abortRef = useRef<AbortController | null>(null);
+  const listId = useId();
   useEffect(() => {
     const ql = q.trim();
     if (ql.length < 2) { setResults([]); setState("idle"); return; }
@@ -785,10 +788,10 @@ function SearchMultiRemote({ type, selected, onToggle, placeholder }: { type: "c
   return (
     <>
       <input className="ob-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder={placeholder}
-        role="combobox" aria-expanded={results.length > 0} aria-label={placeholder}
+        role="combobox" aria-expanded={results.length > 0} aria-controls={listId} aria-autocomplete="list" aria-label={placeholder}
         onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); const top = results.find((r) => !lowerSel.includes(r.toLowerCase())); if (top) add(top); else if (canAdd) add(ql); } }} />
       {selected.length > 0 && <div className="checks" style={{ marginTop: 8 }}>{selected.map((s) => <button key={s} className="check on" onClick={() => onToggle(s)}>{s} ✕</button>)}</div>}
-      <div className="checks" style={{ marginTop: 8 }}>
+      <div className="checks" id={listId} role="listbox" aria-label={placeholder} style={{ marginTop: 8 }}>
         {state === "loading" && <span className="tsearch-note">Searching…</span>}
         {state === "error" && <span className="tsearch-note">Search is unavailable right now — you can still type your own below.</span>}
         {canAdd && <button className="check" onClick={() => add(ql)}>+ Add “{ql}” <span className="tbadge custom">your words</span></button>}

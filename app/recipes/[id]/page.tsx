@@ -78,10 +78,11 @@ export default function RecipePage({ params }: { params: Promise<{ id: string }>
             ))}
           </div>
           <div className="nut">
+            <span className="nut-est">Estimated</span>
             <span>{totals.kcal} kcal</span><span>{totals.sugar_g.toFixed(1)}g sugar</span>
             <span>{totals.sodium_mg}mg sodium</span><span>{totals.carbs_g}g carbs</span>
           </div>
-          <div className="explain-src">Quantities are approximate per-person guidance scaled for {servings}, not a medical prescription.</div>
+          <div className="explain-src">Nutrition figures are approximate estimates for guidance, not lab-verified values. Quantities are approximate per-person guidance scaled for {servings}, not a medical prescription.</div>
         </div>
         <div className="panel">
           <h3>🧺 Ingredients by component</h3>
