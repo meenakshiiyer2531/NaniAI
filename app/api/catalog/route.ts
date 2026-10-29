@@ -19,25 +19,26 @@ export async function GET() {
     // dish catalog is smaller than this list; these let users state preferences
     // honestly across every region even where we don't yet have matching vetted dishes.
     cuisineOptions: [
+      // Lead with a globally diverse mix (shown first in the picker)
+      "Italian", "Mexican", "Japanese", "Chinese", "Thai", "Mediterranean",
+      "North Indian", "French", "Korean", "American", "Middle Eastern", "Spanish",
+      "Greek", "Vietnamese", "South Indian", "Ethiopian", "Nigerian", "Brazilian",
+      "Lebanese", "Turkish", "Caribbean", "Moroccan", "German", "Peruvian",
       // South Asia
-      "North Indian", "South Indian", "East Indian", "West Indian", "Northeast Indian",
-      "Mughlai", "Bengali", "Gujarati", "Rajasthani", "Punjabi", "Kashmiri",
-      "Hyderabadi", "Andhra", "Kerala", "Tamil", "Goan", "Chettinad", "Udupi",
+      "East Indian", "West Indian", "Northeast Indian", "Mughlai", "Bengali",
+      "Gujarati", "Rajasthani", "Punjabi", "Kashmiri", "Hyderabadi", "Andhra",
+      "Kerala", "Tamil", "Goan", "Chettinad", "Udupi",
       "Pakistani", "Bangladeshi", "Sri Lankan", "Nepali",
       // East & Southeast Asia
-      "Chinese", "Sichuan", "Cantonese", "Japanese", "Korean", "Taiwanese",
-      "Thai", "Vietnamese", "Indonesian", "Malaysian", "Filipino", "Singaporean",
+      "Sichuan", "Cantonese", "Taiwanese", "Indonesian", "Malaysian", "Filipino", "Singaporean",
       // Middle East & West Asia
-      "Lebanese", "Turkish", "Persian", "Israeli", "Syrian", "Gulf / Arabian", "Middle Eastern",
+      "Persian", "Israeli", "Syrian", "Gulf / Arabian",
       // Europe
-      "Italian", "French", "Spanish", "Greek", "Mediterranean", "German",
       "Portuguese", "British", "Nordic", "Balkan", "Eastern European", "Continental",
       // Africa
-      "Ethiopian", "Nigerian", "Ghanaian", "Moroccan", "Egyptian", "Kenyan",
-      "Senegalese", "South African", "West African", "North African",
+      "Ghanaian", "Egyptian", "Kenyan", "Senegalese", "South African", "West African", "North African",
       // Americas
-      "American", "Southern US", "Cajun / Creole", "Canadian", "Mexican",
-      "Caribbean", "Brazilian", "Peruvian", "Colombian", "Argentinian", "Venezuelan",
+      "Southern US", "Cajun / Creole", "Canadian", "Colombian", "Argentinian", "Venezuelan",
       // Oceania & styles
       "Australian", "New Zealand", "Pacific Islander", "Fusion", "Vegan / Plant-based",
     ],

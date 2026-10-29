@@ -915,7 +915,7 @@ function SearchMultiRemote({ type, selected, onToggle, placeholder }: { type: "c
 function SearchMulti({ options, selected, onToggle, placeholder }: { options: string[]; selected: string[]; onToggle: (v: string) => void; placeholder?: string }) {
   const [q, setQ] = useState("");
   const ql = q.trim().toLowerCase();
-  const filtered = ql ? options.filter((o) => o.toLowerCase().includes(ql)).slice(0, 10) : options.slice(0, 10);
+  const filtered = ql ? options.filter((o) => o.toLowerCase().includes(ql)).slice(0, 14) : options.slice(0, 30);
   const canAdd = ql && !options.some((o) => o.toLowerCase() === ql) && !selected.some((s) => s.toLowerCase() === ql);
   return (
     <>
