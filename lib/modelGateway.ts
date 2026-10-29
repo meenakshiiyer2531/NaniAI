@@ -126,6 +126,8 @@ async function callOpenAICompatible(req: ChatRequest, override?: EndpointOverrid
       body: JSON.stringify({
         model,
         max_tokens: req.maxTokens ?? 500,
+        temperature: 1,
+        top_p: 0.95,
         messages: [
           { role: "system", content: req.system },
           { role: "user", content: req.user },
@@ -135,7 +137,10 @@ async function callOpenAICompatible(req: ChatRequest, override?: EndpointOverrid
     });
     if (!res.ok) throw new Error(`LLM ${res.status}: ${(await res.text()).slice(0, 120)}`);
     const data = await res.json();
-    const text = (data?.choices?.[0]?.message?.content ?? "").trim();
+    const msg = data?.choices?.[0]?.message ?? {};
+    // Some NVIDIA/Nemotron "reasoning" models return the answer in
+    // reasoning_content when content is empty — accept either.
+    const text = (msg.content || msg.reasoning_content || "").trim();
     if (!text) throw new Error("LLM returned empty content");
     const tin = data?.usage?.prompt_tokens ?? 0;
     const tout = data?.usage?.completion_tokens ?? 0;
@@ -236,7 +241,7 @@ export async function modelHealthCheck(): Promise<{
       system: "You are a health check.",
       user: "Reply with the single word: ok",
       mockText: "ok",
-      maxTokens: 5,
+      maxTokens: 24,
     });
     return { provider, configured: true, ok: true, detail: `Live: ${r.modelName} responded (${r.latencyMs}ms) via ${host || "?"} [${source}].`, host, infra, source, model };
   } catch (err) {
