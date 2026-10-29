@@ -21,6 +21,7 @@ export async function runCultureAgent(
 ): Promise<CultureResult> {
   const anchor: TasteAnchor = {
     cuisine: persona.cuisine,
+    cuisines: persona.cuisines,
     region: persona.region,
     lovedDishes: persona.lovedDishIds.map(getDish),
   };

@@ -46,6 +46,11 @@ export interface Persona {
   name: string;
   age: number;
   cuisine: string;
+  /** All cuisines the person enjoys (multi-select). The engine scores a dish by
+   *  its BEST affinity across this list, so a user who likes Japanese + Mexican +
+   *  Mediterranean gets variety from all three — not just the first. Empty means
+   *  "open to everything": no cuisine is preferred (and none is defaulted). */
+  cuisines?: string[];
   /** Sub-regional place (e.g. "Tamil Nadu", "Punjab", "Kerala"). Sharpens the
    *  Qloo taste signal toward dishes popular where the person is from. */
   region?: string;
@@ -119,8 +124,8 @@ export interface PlanItem {
    *  only added while the combined plate still fits the safety caps. */
   sides?: Dish[];
   substitutedFor?: Substitution;
-  /** Alternative MAIN dishes for this slot (swap the main). */
-  alternatives?: { dish: Dish; familiarity: number; receipt: string[] }[];
+  /** Alternative COMPLETE plates for this slot (each a main + its own sides). */
+  alternatives?: { dish: Dish; familiarity: number; receipt: string[]; sides?: Dish[] }[];
 }
 
 export interface Plan {

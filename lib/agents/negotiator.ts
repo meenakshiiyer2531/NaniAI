@@ -40,6 +40,14 @@ const isThin = (d: Dish) => d.tags.includes("soup") || d.tags.includes("liquid")
  *  broths are SIDES — they round out a plate but are never a standalone meal.
  *  Tag-based so the catalog can grow without editing this file. */
 const isSideDish = (d: Dish) => d.tags.includes("accompaniment") || isThin(d);
+/** Cuisines whose sides are culturally "neutral" (green salad, clear soup,
+ *  yogurt) — safe to pair with a main of ANY cuisine. Everything else may only
+ *  accompany a main of its OWN cuisine, so we never bolt an Indian chutney onto
+ *  an Italian pasta. Mirrors NEUTRAL_CUISINES in lib/qloo/mock.ts. */
+const NEUTRAL_SIDE_CUISINES = new Set(["Western", "American"]);
+/** May this side sit on this main's plate? Same cuisine, or a neutral side. */
+const sideMatchesMain = (side: Dish, main: Dish) =>
+  side.cuisine === main.cuisine || NEUTRAL_SIDE_CUISINES.has(side.cuisine);
 /** A "main" is a substantial dish — not a dessert, not a side/broth. */
 const isMainDish = (d: Dish) => !isDessert(d) && !isSideDish(d);
 
@@ -67,11 +75,31 @@ function pickForSlots(
   const used = new Set<string>();
   const items: PlanItem[] = [];
 
+  // Day-rotated cuisine preference: the catalog's cuisines are rotated by `day`
+  // so a DIFFERENT cuisine leads each day. This is the tiebreaker among
+  // equally-familiar dishes — it gives genuine global variety for "open to
+  // everything" and multi-cuisine users and stops any one cuisine (Indian or
+  // otherwise) from winning every tie just because it scores well on a generic
+  // health chart. Returns 0..1, higher = favoured today.
+  const ALL_CUISINES = Array.from(new Set(DISHES.map((d) => d.cuisine))).sort();
+  const rotationBonus = (cuisine: string): number => {
+    const n = ALL_CUISINES.length;
+    if (n === 0) return 0;
+    const idx = ALL_CUISINES.indexOf(cuisine);
+    if (idx < 0) return 0;
+    const pos = (idx - (day % n) + n) % n; // 0 = this cuisine leads today
+    return (n - pos) / n;
+  };
+
   const rank = (a: Dish, b: Dish) => {
     if (mode === "grounded") {
       const fa = familiarityOf(ctx.affById.get(a.id));
       const fb = familiarityOf(ctx.affById.get(b.id));
       if (fb !== fa) return fb - fa;
+      // Equal taste familiarity → rotate cuisines for variety, then health.
+      const ra = rotationBonus(a.cuisine);
+      const rb = rotationBonus(b.cuisine);
+      if (rb !== ra) return rb - ra;
       return genericHealthScore(b) - genericHealthScore(a);
     }
     return genericHealthScore(b) - genericHealthScore(a);
@@ -108,20 +136,26 @@ function pickForSlots(
 
     // Build a full plate (thali): add complementary accompaniments one at a time,
     // keeping the WHOLE plate within every safety cap. Snacks stay single.
-    if (slot !== "snack") {
+    // `markUsed` reserves sides for the primary; alternatives may reuse them
+    // (only one option is served at a time) so EVERY option is a complete plate.
+    const composeSides = (main: Dish, markUsed: boolean): Dish[] => {
+      if (slot === "snack") return [];
       const sides: Dish[] = [];
-      const sideCandidates = compliantPool
-        .filter((d) => d.id !== dish.id && !used.has(d.id) && isSideDish(d))
+      const cands = compliantPool
+        .filter((d) => d.id !== main.id && isSideDish(d) && sideMatchesMain(d, main) && (!markUsed || !used.has(d.id)))
         .sort(rank);
-      for (const cand of sideCandidates) {
+      for (const cand of cands) {
         if (sides.length >= 3) break;
-        if (plateFits(dish, [...sides, cand], ctx)) {
+        if (plateFits(main, [...sides, cand], ctx)) {
           sides.push(cand);
-          used.add(cand.id);
+          if (markUsed) used.add(cand.id);
         }
       }
-      if (sides.length) item.sides = sides;
-    }
+      return sides;
+    };
+
+    const primarySides = composeSides(dish, true);
+    if (primarySides.length) item.sides = primarySides;
 
     if (mode === "grounded") {
       item.alternatives = primaryPool
@@ -131,6 +165,7 @@ function pickForSlots(
           dish: d,
           familiarity: familiarityOf(ctx.affById.get(d.id)),
           receipt: ctx.affById.get(d.id)?.evidence ?? [],
+          sides: composeSides(d, false),
         }));
     }
     items.push(item);

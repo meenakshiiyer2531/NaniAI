@@ -11,6 +11,10 @@ import type { Dish, Affinity } from "@/lib/types";
 
 export interface TasteAnchor {
   cuisine: string;
+  /** All cuisines the person enjoys. The dish's cuisine affinity is the BEST
+   *  match across this list (so multi-cuisine users get variety). Empty/absent
+   *  means "open to everything" — every cuisine scores equally neutral. */
+  cuisines?: string[];
   /** Optional sub-regional place that sharpens preferences. */
   region?: string;
   lovedDishes: Dish[];
@@ -34,8 +38,28 @@ const REGION_SIGNATURE: Record<string, string[]> = {
   "Andhra Pradesh": ["tamarind", "pepper", "rice", "savory"],
 };
 
+/** Cuisines whose everyday staples (oats, yogurt, fruit, green salad, clear
+ *  soup) are culturally "neutral" — they sit comfortably on a plate of any
+ *  cuisine. This lets a user whose own cuisine has no breakfast/snack in the
+ *  catalog fall back to a neutral option instead of a foreign ethnic dish. */
+const NEUTRAL_CUISINES = new Set(["Western", "American"]);
+/** The Indian sub-cuisines, which are mutually adjacent. */
+const INDIAN_FAMILY = new Set([
+  "South Indian",
+  "North Indian",
+  "West Indian",
+  "East Indian",
+]);
+
 function cuisineAffinity(a: string, b: string): number {
-  return CUISINE_ADJACENCY[a]?.[b] ?? (a === b ? 1 : 0.05);
+  if (a === b) return 1.0;
+  const explicit = CUISINE_ADJACENCY[a]?.[b];
+  if (explicit != null) return explicit;
+  if (INDIAN_FAMILY.has(a) && INDIAN_FAMILY.has(b)) return 0.55;
+  // Neutral everyday foods pair with any cuisine (a Western yogurt/oats breakfast
+  // is a sensible default for anyone when their own cuisine offers none).
+  if (NEUTRAL_CUISINES.has(a) || NEUTRAL_CUISINES.has(b)) return 0.45;
+  return 0.08;
 }
 
 /** Overlap coefficient: |∩| / min(|a|,|b|). More generous than Jaccard for
@@ -58,8 +82,20 @@ export function computeMockAffinities(
   anchor: TasteAnchor,
   candidates: Dish[],
 ): Affinity[] {
+  // The person's cuisines (multi-select). Fall back to the single `cuisine`.
+  // Empty = "open to everything": no cuisine is preferred, so every dish gets a
+  // neutral cuisine score and variety/health drive the picks (never an Indian
+  // or any other default).
+  let anchorCuisines: string[] = [];
+  if (anchor.cuisines && anchor.cuisines.length > 0) anchorCuisines = anchor.cuisines;
+  else if (anchor.cuisine) anchorCuisines = [anchor.cuisine];
+  const openToEverything = anchorCuisines.length === 0;
+
   return candidates.map((dish) => {
-    const cAff = cuisineAffinity(anchor.cuisine, dish.cuisine);
+    // Best cuisine affinity across ALL the person's cuisines.
+    const cAff = openToEverything
+      ? 0.5
+      : Math.max(...anchorCuisines.map((c) => cuisineAffinity(c, dish.cuisine)));
 
     // Similarity to the closest individual favorite.
     let bestLovedSim = 0;
@@ -84,12 +120,14 @@ export function computeMockAffinities(
     const score = Math.max(0, Math.min(1, raw));
 
     const evidence: string[] = [];
-    if (dish.cuisine === anchor.cuisine) {
-      evidence.push(`same cuisine as favorites (${dish.cuisine})`);
+    if (openToEverything) {
+      evidence.push(`open to all cuisines — ${dish.cuisine} is a fair match`);
+    } else if (anchorCuisines.includes(dish.cuisine)) {
+      evidence.push(`one of your cuisines (${dish.cuisine})`);
     } else if (cAff >= 0.4) {
-      evidence.push(`${dish.cuisine} is culturally adjacent to ${anchor.cuisine}`);
+      evidence.push(`${dish.cuisine} is culturally close to ${anchorCuisines.join("/")}`);
     } else {
-      evidence.push(`${dish.cuisine} is culturally distant from ${anchor.cuisine}`);
+      evidence.push(`${dish.cuisine} is culturally distant from ${anchorCuisines.join("/")}`);
     }
     if (bestLoved && bestShared.length > 0) {
       evidence.push(

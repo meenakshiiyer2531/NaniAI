@@ -46,6 +46,21 @@ function sanitizePersona(input: any): Persona {
           .filter((c: Condition | null): c is Condition => c !== null),
       ))
     : [];
+  // Cuisines the person enjoys (multi-select). No cuisine is ever defaulted:
+  // an empty list means "open to everything" and the engine prefers none.
+  const cuisines: string[] = Array.isArray(input?.cuisines)
+    ? Array.from(
+        new Set(
+          input.cuisines
+            .filter((c: any) => typeof c === "string" && c.trim())
+            .map((c: string) => c.trim().slice(0, 40)),
+        ),
+      ).slice(0, 12) as string[]
+    : [];
+  // Back-compat: a single `cuisine` string still works; fold it into the list.
+  const single = typeof input?.cuisine === "string" ? input.cuisine.trim().slice(0, 40) : "";
+  if (single && !cuisines.includes(single)) cuisines.unshift(single);
+
   const lovedDishIds = Array.isArray(input?.lovedDishIds)
     ? input.lovedDishIds.filter((id: any) => typeof id === "string" && DISHES_BY_ID[id])
     : [];
@@ -70,7 +85,8 @@ function sanitizePersona(input: any): Persona {
     id: "custom",
     name: String(input?.name ?? "You").slice(0, 40) || "You",
     age: Math.max(1, Math.min(120, Math.round(Number(input?.age)) || 30)),
-    cuisine: String(input?.cuisine ?? "South Indian").slice(0, 40),
+    cuisine: cuisines[0] ?? "",
+    cuisines,
     region: input?.region ? String(input.region).slice(0, 40) : undefined,
     conditions,
     medications: Array.isArray(input?.medications)

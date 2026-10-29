@@ -265,6 +265,30 @@ export const DISHES: Dish[] = [
     slots: ["dinner", "snack"],
     blurb: "A thin clear vegetable soup — safe, but generic.",
   },
+  {
+    id: "fruit_bowl",
+    name: "Fresh Fruit Bowl",
+    cuisine: "Western",
+    tags: ["fruit", "soft", "fresh", "snack", "naturally-sweet"],
+    ingredients: ["apple", "pear", "berries"],
+    allergens: [],
+    nutrition: { kcal: 90, sugar_g: 15, sodium_mg: 2, carbs_g: 23, potassium_mg: 290 },
+    texture: 2,
+    slots: ["snack", "breakfast"],
+    blurb: "A bowl of fresh seasonal fruit — a light, culture-neutral snack.",
+  },
+  {
+    id: "nuts_seeds",
+    name: "Mixed Nuts & Seeds",
+    cuisine: "Western",
+    tags: ["nuts", "protein", "healthy-fat", "snack", "crunchy"],
+    ingredients: ["almonds", "walnuts", "pumpkin seeds"],
+    allergens: ["tree-nuts"],
+    nutrition: { kcal: 170, sugar_g: 2, sodium_mg: 3, carbs_g: 6, potassium_mg: 200 },
+    texture: 4,
+    slots: ["snack"],
+    blurb: "A small handful of unsalted nuts and seeds — a neutral protein snack.",
+  },
 
   // ---------- Accompaniments / sides (never a standalone meal) ----------
   { id: "coconut_chutney", name: "Coconut Chutney", cuisine: "South Indian", tags: ["accompaniment", "coconut", "soft", "mild"], ingredients: ["coconut", "green chili", "ginger", "curry leaf"], allergens: [], nutrition: { kcal: 90, sugar_g: 1, sodium_mg: 120, carbs_g: 4, potassium_mg: 110 }, texture: 2, slots: ["breakfast", "lunch", "dinner"], blurb: "Fresh coconut chutney — the classic cooling side for idli and dosa." },
@@ -291,6 +315,27 @@ export const DISHES: Dish[] = [
   { id: "aloo_paratha", name: "Aloo Paratha", cuisine: "North Indian", tags: ["wheat", "potato", "griddled", "filling"], ingredients: ["whole wheat flour", "potato", "spices"], allergens: ["gluten"], nutrition: { kcal: 260, sugar_g: 2, sodium_mg: 360, carbs_g: 40, potassium_mg: 320 }, texture: 5, slots: ["breakfast", "lunch"], blurb: "Stuffed potato flatbread — filling; lovely with curd." },
   { id: "set_dosa", name: "Set Dosa", cuisine: "South Indian", tags: ["fermented", "rice", "soft", "griddled"], ingredients: ["rice", "urad dal", "poha"], allergens: [], nutrition: { kcal: 150, sugar_g: 1, sodium_mg: 220, carbs_g: 28, potassium_mg: 90 }, texture: 3, slots: ["breakfast", "dinner"], blurb: "Soft, spongy stacked dosas — gentler than a crisp dosa." },
   { id: "appam", name: "Appam", cuisine: "South Indian", tags: ["fermented", "rice", "coconut", "soft"], ingredients: ["rice", "coconut", "yeast"], allergens: [], nutrition: { kcal: 130, sugar_g: 2, sodium_mg: 160, carbs_g: 26, potassium_mg: 80 }, texture: 2, slots: ["breakfast", "dinner"], blurb: "Soft lacy rice-and-coconut hoppers — easy to chew." },
+
+  // ---------- Global mains ----------
+  { id: "veg_pasta", name: "Vegetable Pasta", cuisine: "Italian", tags: ["pasta", "vegetable", "tomato", "soft"], ingredients: ["whole wheat pasta", "tomato", "zucchini", "olive oil", "garlic"], allergens: ["gluten"], nutrition: { kcal: 320, sugar_g: 6, sodium_mg: 320, carbs_g: 52, potassium_mg: 420 }, texture: 3, slots: ["lunch", "dinner"], blurb: "Whole-wheat pasta with a light tomato-and-vegetable sauce." },
+  { id: "veg_risotto", name: "Vegetable Risotto", cuisine: "Italian", tags: ["rice", "creamy", "vegetable", "soft"], ingredients: ["arborio rice", "vegetable stock", "peas", "parmesan", "onion"], allergens: ["dairy"], nutrition: { kcal: 300, sugar_g: 3, sodium_mg: 380, carbs_g: 48, potassium_mg: 260 }, texture: 3, slots: ["lunch", "dinner"], blurb: "Creamy slow-cooked rice — soft and comforting." },
+  { id: "bean_tacos", name: "Black Bean Tacos", cuisine: "Mexican", tags: ["beans", "corn", "protein", "soft"], ingredients: ["corn tortilla", "black beans", "onion", "coriander", "lime"], allergens: [], nutrition: { kcal: 290, sugar_g: 3, sodium_mg: 380, carbs_g: 44, potassium_mg: 520 }, texture: 4, slots: ["lunch", "dinner"], blurb: "Soft corn tortillas with spiced black beans." },
+  { id: "burrito_bowl", name: "Veg Burrito Bowl", cuisine: "Mexican", tags: ["rice", "beans", "vegetable", "soft"], ingredients: ["rice", "black beans", "corn", "bell pepper", "lime"], allergens: [], nutrition: { kcal: 340, sugar_g: 4, sodium_mg: 360, carbs_g: 58, potassium_mg: 540 }, texture: 3, slots: ["lunch", "dinner"], blurb: "Rice-and-bean bowl with vegetables — hearty and balanced." },
+  { id: "falafel_pita", name: "Falafel Pita", cuisine: "Mediterranean", tags: ["chickpea", "protein", "bread"], ingredients: ["chickpeas", "pita bread", "parsley", "cumin", "garlic"], allergens: ["gluten", "sesame"], nutrition: { kcal: 330, sugar_g: 3, sodium_mg: 420, carbs_g: 46, potassium_mg: 480 }, texture: 5, slots: ["lunch", "dinner"], blurb: "Herbed chickpea fritters tucked in soft pita." },
+  { id: "hummus_bowl", name: "Hummus & Veg Bowl", cuisine: "Mediterranean", tags: ["chickpea", "vegetable", "soft"], ingredients: ["chickpeas", "tahini", "olive oil", "cucumber", "tomato"], allergens: ["sesame"], nutrition: { kcal: 280, sugar_g: 4, sodium_mg: 300, carbs_g: 30, potassium_mg: 420 }, texture: 3, slots: ["lunch", "dinner"], blurb: "Creamy hummus with fresh vegetables — light and filling." },
+  { id: "veg_donburi", name: "Vegetable Donburi", cuisine: "Japanese", tags: ["rice", "vegetable", "soft", "umami"], ingredients: ["rice", "mixed vegetables", "soy sauce", "ginger", "spring onion"], allergens: ["soy"], nutrition: { kcal: 300, sugar_g: 5, sodium_mg: 520, carbs_g: 52, potassium_mg: 360 }, texture: 3, slots: ["lunch", "dinner"], blurb: "Japanese rice bowl topped with simmered vegetables." },
+  { id: "bibimbap", name: "Vegetable Bibimbap", cuisine: "Korean", tags: ["rice", "vegetable", "egg", "soft"], ingredients: ["rice", "spinach", "carrot", "egg", "sesame oil"], allergens: ["egg", "soy", "sesame"], nutrition: { kcal: 340, sugar_g: 5, sodium_mg: 540, carbs_g: 50, potassium_mg: 480 }, texture: 3, slots: ["lunch", "dinner"], blurb: "Korean rice bowl with seasoned vegetables and egg." },
+  { id: "tofu_stir_fry", name: "Tofu Veg Stir-Fry", cuisine: "Chinese", tags: ["tofu", "vegetable", "protein", "soft"], ingredients: ["tofu", "broccoli", "bell pepper", "soy sauce", "ginger"], allergens: ["soy"], nutrition: { kcal: 260, sugar_g: 6, sodium_mg: 560, carbs_g: 20, potassium_mg: 520 }, texture: 4, slots: ["lunch", "dinner"], blurb: "Quick tofu-and-vegetable stir-fry." },
+  { id: "grain_bowl", name: "Quinoa Grain Bowl", cuisine: "American", tags: ["quinoa", "vegetable", "protein", "soft"], ingredients: ["quinoa", "chickpeas", "spinach", "avocado", "lemon"], allergens: [], nutrition: { kcal: 310, sugar_g: 3, sodium_mg: 240, carbs_g: 40, potassium_mg: 560 }, texture: 3, slots: ["lunch", "dinner"], blurb: "Protein-rich quinoa bowl with greens." },
+  { id: "shakshuka", name: "Shakshuka", cuisine: "Middle Eastern", tags: ["egg", "tomato", "soft", "protein"], ingredients: ["egg", "tomato", "bell pepper", "onion", "cumin"], allergens: ["egg"], nutrition: { kcal: 240, sugar_g: 7, sodium_mg: 480, carbs_g: 16, potassium_mg: 560 }, texture: 2, slots: ["breakfast", "dinner"], blurb: "Eggs poached in a spiced tomato-pepper sauce." },
+  { id: "overnight_oats", name: "Overnight Oats", cuisine: "American", tags: ["oats", "soft", "breakfast-staple", "fiber"], ingredients: ["oats", "milk", "banana", "chia seeds"], allergens: ["gluten", "dairy"], nutrition: { kcal: 280, sugar_g: 10, sodium_mg: 60, carbs_g: 48, potassium_mg: 420 }, texture: 2, slots: ["breakfast"], blurb: "Creamy no-cook oats soaked overnight — soft and easy." },
+
+  // ---------- Global accompaniments (sides) ----------
+  { id: "miso_soup", name: "Miso Soup", cuisine: "Japanese", tags: ["accompaniment", "soup", "liquid", "soy", "umami"], ingredients: ["miso paste", "tofu", "seaweed", "spring onion"], allergens: ["soy"], nutrition: { kcal: 60, sugar_g: 2, sodium_mg: 500, carbs_g: 6, potassium_mg: 180 }, texture: 1, slots: ["lunch", "dinner"], blurb: "Light savory miso broth — a classic Japanese side." },
+  { id: "cucumber_salad", name: "Cucumber Salad", cuisine: "Mediterranean", tags: ["accompaniment", "vegetable", "cooling", "soft"], ingredients: ["cucumber", "lemon", "olive oil", "dill"], allergens: [], nutrition: { kcal: 60, sugar_g: 3, sodium_mg: 120, carbs_g: 7, potassium_mg: 200 }, texture: 4, slots: ["lunch", "dinner"], blurb: "Crisp, refreshing cucumber side." },
+  { id: "pico_de_gallo", name: "Pico de Gallo", cuisine: "Mexican", tags: ["accompaniment", "tangy", "vegetable", "fresh"], ingredients: ["tomato", "onion", "coriander", "lime", "jalapeno"], allergens: [], nutrition: { kcal: 35, sugar_g: 3, sodium_mg: 150, carbs_g: 7, potassium_mg: 230 }, texture: 3, slots: ["lunch", "dinner"], blurb: "Fresh tomato-onion-lime salsa." },
+  { id: "side_salad", name: "Green Side Salad", cuisine: "American", tags: ["accompaniment", "vegetable", "raw", "fresh"], ingredients: ["lettuce", "cucumber", "cherry tomato", "olive oil"], allergens: [], nutrition: { kcal: 70, sugar_g: 3, sodium_mg: 120, carbs_g: 8, potassium_mg: 260 }, texture: 5, slots: ["lunch", "dinner"], blurb: "A simple crisp green salad." },
+  { id: "greek_salad", name: "Greek Salad", cuisine: "Mediterranean", tags: ["accompaniment", "vegetable", "feta", "fresh"], ingredients: ["cucumber", "tomato", "olives", "feta", "olive oil"], allergens: ["dairy"], nutrition: { kcal: 150, sugar_g: 4, sodium_mg: 420, carbs_g: 10, potassium_mg: 320 }, texture: 4, slots: ["lunch", "dinner"], blurb: "Tomato, cucumber, olives and feta." },
 ];
 
 export const DISHES_BY_ID: Record<string, Dish> = Object.fromEntries(

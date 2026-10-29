@@ -1,12 +1,16 @@
 "use client";
 
-import { createBrowserClient } from "@supabase/ssr";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 // Browser Supabase client (singleton). Uses the PUBLIC url + anon key only —
 // never the service-role key. Per-user data access is enforced in Postgres by
 // Row Level Security (see supabase/migrations/0001_init.sql), so the browser
 // can never read or write another user's row even though the anon key is public.
+//
+// We use the standard supabase-js client with localStorage persistence +
+// auto-refresh: this is a pure client-side app (no SSR middleware), so a
+// localStorage session that refreshes itself keeps users signed in across
+// reloads and token expiry — fixing "I get logged out / my data is gone".
 
 let _client: SupabaseClient | null = null;
 
@@ -19,9 +23,17 @@ export function supabaseConfigured(): boolean {
 
 export function supabaseBrowser(): SupabaseClient {
   if (_client) return _client;
-  _client = createBrowserClient(
+  _client = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        storageKey: "naniai-auth",
+      },
+    },
   );
   return _client;
 }
@@ -45,5 +57,6 @@ export interface Profile {
   goals: string[];
   emergency_name: string | null;
   emergency_phone: string | null;
+  feedback?: Record<string, "up" | "down">;
   onboarding_done: boolean;
 }

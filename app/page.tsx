@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { buildRecipe, portionOf, prepTipFor } from "@/lib/recipes";
 import { dayTotals } from "@/lib/nutrition";
@@ -13,7 +13,7 @@ type Dish = {
   ingredients: string[]; tags: string[];
   nutrition: { kcal: number; sugar_g: number; sodium_mg: number; carbs_g: number; potassium_mg?: number };
 };
-type Alt = { dish: Dish; familiarity: number; receipt: string[] };
+type Alt = { dish: Dish; familiarity: number; receipt: string[]; sides?: Dish[] };
 type PlanItem = { slot: string; dish: Dish; sides?: Dish[]; familiarity: number; receipt: string[]; alternatives?: Alt[] };
 type PlanResponse = {
   plan: { items: PlanItem[]; avgFamiliarity: number; violationCount: number };
@@ -44,13 +44,16 @@ const COND_LABEL: Record<string, string> = {
   type_2_diabetes: "Type 2 diabetes", hypertension: "hypertension",
   chronic_kidney_disease: "kidney disease", dysphagia: "swallowing difficulty",
 };
-const FB_KEY = "naniai.feedback.v1";
+const PREP_SLOTS = ["breakfast", "lunch", "snack", "dinner"] as const;
 
 function profileToPersona(p: Profile) {
   return {
     name: p.preferred_name || "You",
     age: p.age ?? 30,
-    cuisine: (p.cuisines && p.cuisines[0]) || "South Indian",
+    // All cuisines the user enjoys — no cuisine is ever defaulted. An empty list
+    // means "open to everything" (the engine prefers none).
+    cuisines: p.cuisines || [],
+    cuisine: (p.cuisines && p.cuisines[0]) || "",
     region: p.region || undefined,
     conditions: p.conditions || [],
     medications: p.medications || [],
@@ -133,7 +136,6 @@ export default function Home() {
   useEffect(() => {
     fetch("/api/personas").then((r) => r.json()).then((d) => setStatus(d.status)).catch(() => {});
     fetch("/api/catalog").then((r) => r.json()).then(setCatalog).catch(() => {});
-    try { const fb = localStorage.getItem(FB_KEY); if (fb) setFeedback(JSON.parse(fb)); } catch {}
     if (!supabase) { setUserId(null); return; }
     supabase.auth.getSession().then(({ data: { session } }) => setUserId(session?.user?.id ?? null));
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
@@ -151,7 +153,7 @@ export default function Home() {
     (async () => {
       const { data: row } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
       if (cancel) return;
-      if (row) setProfile(row as Profile);
+      if (row) { setProfile(row as Profile); setFeedback(((row as any).feedback as Record<string, "up" | "down">) ?? {}); }
       else {
         // trigger may not have run yet — create the row
         await supabase.from("profiles").insert({ id: userId });
@@ -205,12 +207,14 @@ export default function Home() {
   const isPrepared = (slot: string) => !!prepared[`${todayKey()}:${slot}`];
 
   function rate(dishId: string, v: "up" | "down") {
-    setFeedback((prev) => {
-      const next = { ...prev };
-      if (next[dishId] === v) delete next[dishId]; else next[dishId] = v;
-      try { localStorage.setItem(FB_KEY, JSON.stringify(next)); } catch {}
-      return next;
-    });
+    const next = { ...feedback };
+    if (next[dishId] === v) delete next[dishId]; else next[dishId] = v;
+    setFeedback(next); // optimistic
+    if (supabase && userId) {
+      supabase.from("profiles").update({ feedback: next }).eq("id", userId).then(({ error }) => {
+        if (error) setError("Couldn't save your feedback: " + error.message);
+      });
+    }
   }
 
   async function run(nextDay = 0) {
@@ -248,7 +252,7 @@ export default function Home() {
   const effItems: PlanItem[] = useMemo(() => {
     if (!data) return [];
     const items = data.grounded.plan.items.map((it) => {
-      const opts = [it, ...(it.alternatives ?? []).map((a) => ({ ...it, dish: a.dish, sides: undefined, familiarity: a.familiarity, receipt: a.receipt }))];
+      const opts = [it, ...(it.alternatives ?? []).map((a) => ({ ...it, dish: a.dish, sides: a.sides, familiarity: a.familiarity, receipt: a.receipt }))];
       const idx = (swapIdx[it.slot] ?? 0) % opts.length;
       return opts[idx];
     });
@@ -531,25 +535,35 @@ function ConfigNotice() {
 
 // ---------------- auth (login / signup) ----------------
 function Auth({ supabase }: { supabase: ReturnType<typeof supabaseBrowser> }) {
-  const [mode, setMode] = useState<"login" | "signup">("signup");
+  const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const emailOk = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim());
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setErr(""); setBusy(true);
+    const em = email.trim().toLowerCase();
     try {
       if (mode === "signup") {
-        const res = await fetch("/api/auth/signup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password }) });
+        const res = await fetch("/api/auth/signup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: em, password }) });
         const j = await res.json();
-        if (!res.ok) throw new Error(j.error ?? "Sign-up failed.");
+        // If the account already exists, don't dead-end — just sign in below.
+        if (!res.ok && !/already/i.test(j.error ?? "")) throw new Error(j.error ?? "Sign-up failed.");
       }
-      const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
-      if (error) throw new Error(mode === "login" ? "Incorrect email or password." : error.message);
-      // onAuthStateChange handles the rest
+      const { error } = await supabase.auth.signInWithPassword({ email: em, password });
+      if (error) {
+        if (/invalid login|credentials/i.test(error.message)) {
+          throw new Error(mode === "login"
+            ? "Incorrect email or password. New here? Switch to Sign up."
+            : "That email already has an account with a different password. Switch to Log in.");
+        }
+        throw new Error(error.message);
+      }
+      // onAuthStateChange handles the redirect into the app.
     } catch (e) { setErr((e as Error).message); }
     finally { setBusy(false); }
   }
@@ -558,23 +572,23 @@ function Auth({ supabase }: { supabase: ReturnType<typeof supabaseBrowser> }) {
     <div className="welcome"><div className="welcome-card">
       <div className="wbrand">Nani<span className="accent">AI</span></div>
       <h2 className="wtitle">Eat like yourself again.</h2>
-      <p className="wlede">Your private food companion — safe for your health, familiar to your culture. Create an account to save your profile securely.</p>
+      <p className="wlede">Your private food companion — safe for your health, familiar to your culture. Sign in with your email, or create an account to save your profile securely.</p>
       <div className="authtabs">
-        <button className={mode === "signup" ? "on" : ""} onClick={() => { setMode("signup"); setErr(""); }}>Sign up</button>
-        <button className={mode === "login" ? "on" : ""} onClick={() => { setMode("login"); setErr(""); }}>Log in</button>
+        <button type="button" className={mode === "login" ? "on" : ""} onClick={() => { setMode("login"); setErr(""); }}>Log in</button>
+        <button type="button" className={mode === "signup" ? "on" : ""} onClick={() => { setMode("signup"); setErr(""); }}>Sign up</button>
       </div>
       <form className="wform single" onSubmit={submit}>
         <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email" required /></label>
         <label>Password
           <span className="pwwrap">
-            <input type={show ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="at least 8 characters" autoComplete={mode === "signup" ? "new-password" : "current-password"} required />
+            <input type={show ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder={mode === "signup" ? "at least 8 characters" : "your password"} autoComplete={mode === "signup" ? "new-password" : "current-password"} required />
             <button type="button" className="pwtoggle" onClick={() => setShow((s) => !s)}>{show ? "hide" : "show"}</button>
           </span>
         </label>
+        {email && !emailOk && <div className="tsearch-note">Enter a valid email address.</div>}
         {err && <div className="err">⚠ {err}</div>}
-        <div className="wactions"><button className="run" type="submit" disabled={busy || !email || password.length < 8}>{busy ? "Please wait…" : mode === "signup" ? "Create account →" : "Log in →"}</button></div>
+        <div className="wactions"><button className="run" type="submit" disabled={busy || !emailOk || password.length < 8}>{busy ? "Please wait…" : mode === "signup" ? "Create account →" : "Log in →"}</button></div>
       </form>
-      <p className="wnote">Your data is stored securely and only you can access it. Passwords are never stored in plain text.</p>
     </div></div>
   );
 }
@@ -632,9 +646,9 @@ function Onboarding({ catalog, initial, onDone, onSignOut }: { catalog?: Catalog
     { key: "allergies", required: false, bg: "bg-leaf", q: "Any allergies or intolerances?", hint: "Important for safety. Type any — search or add your own. Skip if none.",
       body: <SearchMulti options={catalog?.allergies ?? []} selected={(d.allergies as string[]) ?? []} onToggle={(v) => toggle("allergies", v)} placeholder="search / type an allergy…" /> },
     { key: "conditions", required: false, bg: "bg-spice", q: "Any health conditions to respect?", hint: "Optional and private — type ANY condition in your own words. Selecting one is not a diagnosis.",
-      body: <SearchMulti options={catalog?.conditionOptions ?? []} selected={(d.conditions as string[]) ?? []} onToggle={(v) => toggle("conditions", v)} placeholder="e.g. hypothyroidism, celiac…" /> },
+      body: <SearchMultiRemote type="conditions" selected={(d.conditions as string[]) ?? []} onToggle={(v) => toggle("conditions", v)} placeholder="e.g. hypothyroidism, celiac disease…" /> },
     { key: "meds", required: false, bg: "bg-warm", q: "Any medications?", hint: "Only if you'd like us to watch for food interactions. Type any — search or add your own. Optional.",
-      body: <SearchMulti options={catalog?.medicationOptions ?? catalog?.medications ?? []} selected={(d.medications as string[]) ?? []} onToggle={(v) => toggle("medications", v)} placeholder="search / type a medication…" /> },
+      body: <SearchMultiRemote type="medications" selected={(d.medications as string[]) ?? []} onToggle={(v) => toggle("medications", v)} placeholder="search a medicine or type your own…" /> },
     { key: "lifestyle", required: false, bg: "bg-sun", q: "Tell us about your day", hint: "So meals fit your real routine — not everyone cooks at home at fixed times.",
       body: <>
         <div className="ob-sub">You are a…</div>
@@ -699,6 +713,55 @@ function Onboarding({ catalog, initial, onDone, onSignOut }: { catalog?: Catalog
         </div>
       </div>
     </div>
+  );
+}
+
+// ---------------- remote terminology search (NLM Clinical Tables) ----------------
+function SearchMultiRemote({ type, selected, onToggle, placeholder }: { type: "conditions" | "medications"; selected: string[]; onToggle: (v: string) => void; placeholder?: string }) {
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState<string[]>([]);
+  const [state, setState] = useState<"idle" | "loading" | "error">("idle");
+  const abortRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    const ql = q.trim();
+    if (ql.length < 2) { setResults([]); setState("idle"); return; }
+    const timer = setTimeout(async () => {
+      abortRef.current?.abort();
+      const ctrl = new AbortController();
+      abortRef.current = ctrl;
+      setState("loading");
+      try {
+        const r = await fetch(`/api/terminology?type=${type}&q=${encodeURIComponent(ql)}`, { signal: ctrl.signal });
+        const j = await r.json();
+        setResults(Array.isArray(j.results) ? j.results : []);
+        setState(j.error ? "error" : "idle");
+      } catch (e) {
+        if ((e as any)?.name !== "AbortError") setState("error");
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [q, type]);
+
+  const ql = q.trim();
+  const lowerSel = selected.map((s) => s.toLowerCase());
+  const canAdd = ql.length >= 2 && !results.some((r) => r.toLowerCase() === ql.toLowerCase()) && !lowerSel.includes(ql.toLowerCase());
+  const add = (v: string) => { if (selected.length >= 30 || lowerSel.includes(v.toLowerCase())) return; onToggle(v); setQ(""); setResults([]); };
+
+  return (
+    <>
+      <input className="ob-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder={placeholder}
+        role="combobox" aria-expanded={results.length > 0} aria-label={placeholder}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); const top = results.find((r) => !lowerSel.includes(r.toLowerCase())); if (top) add(top); else if (canAdd) add(ql); } }} />
+      {selected.length > 0 && <div className="checks" style={{ marginTop: 8 }}>{selected.map((s) => <button key={s} className="check on" onClick={() => onToggle(s)}>{s} ✕</button>)}</div>}
+      <div className="checks" style={{ marginTop: 8 }}>
+        {state === "loading" && <span className="tsearch-note">Searching…</span>}
+        {state === "error" && <span className="tsearch-note">Search is unavailable right now — you can still type your own below.</span>}
+        {canAdd && <button className="check" onClick={() => add(ql)}>+ Add “{ql}” <span className="tbadge custom">your words</span></button>}
+        {results.filter((r) => !lowerSel.includes(r.toLowerCase())).map((r) => <button key={r} className="check" onClick={() => add(r)}>{r} <span className="tbadge cat">catalog</span></button>)}
+        {state === "idle" && ql.length >= 2 && results.length === 0 && !canAdd && <span className="tsearch-note">No match — your entry is kept as typed.</span>}
+      </div>
+      <div className="disclaimer">Suggestions from NLM Clinical Tables (US terminology) — not every condition/medicine worldwide. Your own words are always accepted and kept exactly.</div>
+    </>
   );
 }
 
@@ -790,8 +853,8 @@ function ProfilePage({ catalog, profile, onBack, onSave, onSignOut }: { catalog:
         <section className="pcard">
           <h3>Health <small>(private)</small></h3>
           <div className="bfield"><span>Allergies &amp; intolerances</span><SearchMulti options={catalog.allergies} selected={(d.allergies as string[]) ?? []} onToggle={(v) => toggle("allergies", v)} placeholder="search / type an allergy…" /></div>
-          <div className="bfield"><span>Health conditions</span><SearchMulti options={catalog.conditionOptions ?? []} selected={(d.conditions as string[]) ?? []} onToggle={(v) => toggle("conditions", v)} placeholder="search / type any condition…" /></div>
-          <div className="bfield"><span>Medications</span><SearchMulti options={catalog.medicationOptions ?? catalog.medications} selected={(d.medications as string[]) ?? []} onToggle={(v) => toggle("medications", v)} placeholder="search / type a medication…" /></div>
+          <div className="bfield"><span>Health conditions</span><SearchMultiRemote type="conditions" selected={(d.conditions as string[]) ?? []} onToggle={(v) => toggle("conditions", v)} placeholder="search / type any condition…" /></div>
+          <div className="bfield"><span>Medications</span><SearchMultiRemote type="medications" selected={(d.medications as string[]) ?? []} onToggle={(v) => toggle("medications", v)} placeholder="search / type a medication…" /></div>
           <div className="disclaimer">Only diabetes, hypertension, kidney disease and swallowing difficulty currently drive automatic safety limits; other entries are saved so the assistant and your clinician can see them. Not a diagnosis.</div>
         </section>
 
