@@ -117,6 +117,10 @@ async function login(page, acct) {
 }
 async function planDay(page) {
   await page.getByRole("button", { name: /Plan a day/i }).first().click();
+  // Reveal the full day so lunch/dinner cuisine mains are always visible,
+  // regardless of the current time-of-day slot (robust to single-main cuisines).
+  const toggle = page.getByRole("button", { name: /Show my full day/i });
+  try { await toggle.first().waitFor({ timeout: 15000 }); await toggle.first().click(); } catch { /* no data yet */ }
 }
 async function signOut(page) {
   await page.getByRole("button", { name: /^Sign out$/i }).first().click();

@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
     if (EMERGENCY_RE.test(text)) {
       return NextResponse.json({
         reply:
-          "⚠️ If this is a medical emergency, call your local emergency number right now (in India, 112 or 108) — " +
+          "⚠️ If this is a medical emergency, call your local emergency number right now — " +
           "that comes first, before anything else. If you've set a trusted contact, use the Emergency button to message them too. " +
           "I can't handle emergencies myself, but I want you to get help fast.",
         provider: "guardrail",

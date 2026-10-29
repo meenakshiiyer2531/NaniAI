@@ -647,9 +647,9 @@ const DIET = [
 // The key is sent once over HTTPS, encrypted at rest (AES-256-GCM), and NEVER
 // returned to the browser — only a masked "Configured ••••abcd" status comes back.
 // A Nebius key routes the user's requests through Nebius Token Factory.
-function AiKeyManager({ compact }: { compact?: boolean }) {
+function AiKeyManager({ compact, nebiusOnly }: { compact?: boolean; nebiusOnly?: boolean }) {
   const [status, setStatus] = useState<{ configured: boolean; last4: string | null; provider?: string; model?: string | null; encryptionReady?: boolean } | null>(null);
-  const [provider, setProvider] = useState<"nvidia" | "nebius">("nvidia");
+  const [provider, setProvider] = useState<"nvidia" | "nebius">(nebiusOnly ? "nebius" : "nvidia");
   const [val, setVal] = useState("");
   const [model, setModel] = useState("");
   const [show, setShow] = useState(false);
@@ -701,12 +701,16 @@ function AiKeyManager({ compact }: { compact?: boolean }) {
   return (
     <div className="aikey">
       <div className="aikey-head">
-        <b>Your AI provider key</b> <span className="est-badge">optional</span>
+        <b>{nebiusOnly ? "Your Nebius Token Factory key" : "Your AI provider key"}</b> <span className="est-badge">optional</span>
       </div>
       <p className="ob-hint" style={{ marginTop: 0 }}>
-        NaniAI works out of the box with its built-in AI — you don&rsquo;t need a key. Add your own
-        key to use it instead: an <b>NVIDIA</b> key, or a <b>Nebius Token Factory</b> key (which runs
-        your requests on Nebius). We encrypt it on our server and never show it again.
+        {nebiusOnly
+          ? <>NaniAI already runs on a built-in <b>NVIDIA</b> model — you don&rsquo;t need to enter anything.
+            If you have a <b>Nebius Token Factory</b> key, add it to run your requests on Nebius.
+            We encrypt it on our server and never show it again. (You can also add your own NVIDIA key later in your profile.)</>
+          : <>NaniAI works out of the box with its built-in <b>NVIDIA</b> model — no key needed. You can add a
+            <b> Nebius Token Factory</b> key (runs your requests on Nebius), or your own <b>NVIDIA</b> key as a
+            backup if the default key ever expires. We encrypt it on our server and never show it again.</>}
       </p>
       {unavailable && <div className="err">⚠ Key storage isn&rsquo;t enabled on this deployment yet. You can still use the default AI.</div>}
       {status?.configured
@@ -716,17 +720,19 @@ function AiKeyManager({ compact }: { compact?: boolean }) {
         : <div className="aikey-status muted">Using NaniAI&rsquo;s default AI (no personal key set).</div>}
       {!unavailable && (
         <>
-          <div className="checks" style={{ marginTop: 8 }}>
-            <button type="button" className={`check ${provider === "nvidia" ? "on" : ""}`} onClick={() => setProvider("nvidia")}>NVIDIA API</button>
-            <button type="button" className={`check ${provider === "nebius" ? "on" : ""}`} onClick={() => setProvider("nebius")}>Nebius Token Factory</button>
-          </div>
+          {!nebiusOnly && (
+            <div className="checks" style={{ marginTop: 8 }}>
+              <button type="button" className={`check ${provider === "nvidia" ? "on" : ""}`} onClick={() => setProvider("nvidia")}>NVIDIA API</button>
+              <button type="button" className={`check ${provider === "nebius" ? "on" : ""}`} onClick={() => setProvider("nebius")}>Nebius Token Factory</button>
+            </div>
+          )}
           {provider === "nebius" && (
             <input className="ob-input" style={{ marginTop: 8 }} value={model} onChange={(e) => setModel(e.target.value)}
               placeholder="Nebius model id (optional, e.g. an NVIDIA model Token Factory serves)" />
           )}
           <div className="dishadd" style={{ marginTop: 8 }}>
             <input className="ob-input" type={show ? "text" : "password"} value={val} autoComplete="off"
-              onChange={(e) => setVal(e.target.value)} placeholder={status?.configured ? "enter a new key to replace" : provider === "nebius" ? "your Nebius API key" : "nvapi-…"} />
+              onChange={(e) => setVal(e.target.value)} placeholder={status?.configured ? "enter a new key to replace" : provider === "nebius" ? "your Nebius Token Factory key" : "nvapi-…"} />
             <button type="button" className="run ghost" onClick={() => setShow((s) => !s)}>{show ? "hide" : "show"}</button>
             <button type="button" className="run" disabled={busy || val.trim().length < 8} onClick={save}>{busy ? "Saving…" : status?.configured ? "Replace" : "Save"}</button>
           </div>
@@ -774,11 +780,11 @@ function Onboarding({ catalog, initial, onDone, onSignOut }: { catalog?: Catalog
       body: <div className="checks">{DIET.map((o) => <button key={o.v} className={`check ${d.dietary_pattern === o.v ? "on" : ""}`} onClick={() => set({ dietary_pattern: o.v })}>{o.l}</button>)}</div> },
     { key: "cuisines", required: false, bg: "bg-spice", q: "Which cuisines do you love?", hint: "Pick any — we never guess from where you live.",
       body: <SearchMulti options={cuisineList} selected={(d.cuisines as string[]) ?? []} onToggle={(v) => toggle("cuisines", v)} placeholder="search or type a cuisine…" /> },
-    { key: "region", required: false, bg: "bg-warm", q: "Where do you call home?", hint: "Optional — sharpens local taste. Doesn't decide your cuisine.",
-      body: <><input className="ob-input" list="ob-regions" value={d.region ?? ""} onChange={(e) => set({ region: e.target.value })} placeholder="state / UT (optional)" /><datalist id="ob-regions">{(catalog?.regions ?? []).map((r) => <option key={r} value={r} />)}</datalist></> },
+    { key: "region", required: false, bg: "bg-warm", q: "Which country are you in?", hint: "Optional — sharpens local taste and sets country-appropriate emergency guidance.",
+      body: <><input className="ob-input" list="ob-regions" value={d.region ?? ""} onChange={(e) => set({ region: e.target.value })} placeholder="country (optional)" /><datalist id="ob-regions">{(catalog?.regions ?? []).map((r) => <option key={r} value={r} />)}</datalist></> },
     { key: "loved", required: false, bg: "bg-sun", q: "Any favourite dishes?", hint: "Type ANY dish in your own words.",
       body: <>
-        <div className="dishadd"><input className="ob-input" value={dishInput} onChange={(e) => setDishInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && dishInput.trim()) { e.preventDefault(); toggle("loved_dishes", dishInput.trim()); setDishInput(""); } }} placeholder="e.g. Hyderabadi biryani" /><button type="button" className="run ghost" onClick={() => { if (dishInput.trim()) { toggle("loved_dishes", dishInput.trim()); setDishInput(""); } }}>Add</button></div>
+        <div className="dishadd"><input className="ob-input" value={dishInput} onChange={(e) => setDishInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && dishInput.trim()) { e.preventDefault(); toggle("loved_dishes", dishInput.trim()); setDishInput(""); } }} placeholder="e.g. pasta, sushi, jollof rice, tacos" /><button type="button" className="run ghost" onClick={() => { if (dishInput.trim()) { toggle("loved_dishes", dishInput.trim()); setDishInput(""); } }}>Add</button></div>
         <div className="checks" style={{ marginTop: 8 }}>{((d.loved_dishes as string[]) ?? []).map((f) => <button key={f} className="check on" onClick={() => toggle("loved_dishes", f)}>♥ {f} ✕</button>)}</div>
       </> },
     { key: "allergies", required: false, bg: "bg-leaf", q: "Any allergies or intolerances?", hint: "Important for safety. Type any — search or add your own. Skip if none.",
@@ -792,7 +798,7 @@ function Onboarding({ catalog, initial, onDone, onSignOut }: { catalog?: Catalog
         <div className="ob-sub">You are a…</div>
         <div className="checks">{(catalog?.lifestyleRoles ?? ["Working professional", "Student", "Homemaker", "Retired", "Other"]).map((r) => <button key={r} className={`check ${life.role === r ? "on" : ""}`} onClick={() => setLife("role", r)}>{r}</button>)}</div>
         <div className="ob-sub" style={{ marginTop: 12 }}>You live…</div>
-        <div className="checks">{["With parents/family", "With spouse/kids", "Alone", "Shared / PG / hostel"].map((v) => <button key={v} className={`check ${life.livesWith === v ? "on" : ""}`} onClick={() => setLife("livesWith", v)}>{v}</button>)}</div>
+        <div className="checks">{["With parents/family", "With spouse/kids", "Alone", "Shared housing / hostel"].map((v) => <button key={v} className={`check ${life.livesWith === v ? "on" : ""}`} onClick={() => setLife("livesWith", v)}>{v}</button>)}</div>
         <div className="ob-sub" style={{ marginTop: 12 }}>Does work/college provide food?</div>
         <div className="checks">{["Yes, cafeteria/canteen", "Sometimes", "No, I arrange my own"].map((v) => <button key={v} className={`check ${life.workplaceFood === v ? "on" : ""}`} onClick={() => setLife("workplaceFood", v)}>{v}</button>)}</div>
         <div className="ob-sub" style={{ marginTop: 12 }}>Time you have to cook</div>
@@ -816,10 +822,10 @@ function Onboarding({ catalog, initial, onDone, onSignOut }: { catalog?: Catalog
     { key: "emergency", required: false, bg: "bg-leaf", q: "A trusted emergency contact?", hint: "Optional. Lets you message them fast from the 🚨 button. We never message anyone automatically.",
       body: <>
         <input className="ob-input" value={d.emergency_name ?? ""} onChange={(e) => set({ emergency_name: e.target.value })} placeholder="Contact name (e.g. Priya, daughter)" />
-        <input className="ob-input" style={{ marginTop: 8 }} value={d.emergency_phone ?? ""} onChange={(e) => set({ emergency_phone: e.target.value.replace(/[^\d+]/g, "") })} placeholder="+9198XXXXXXXX (with country code)" />
+        <input className="ob-input" style={{ marginTop: 8 }} value={d.emergency_phone ?? ""} onChange={(e) => set({ emergency_phone: e.target.value.replace(/[^\d+]/g, "") })} placeholder="+1 555 000 1234 (with country code)" />
       </> },
-    { key: "aikey", required: false, bg: "bg-sun", q: "Bring your own AI key? (optional)", hint: "Totally optional — NaniAI already includes AI. Add your own NVIDIA or Nebius key only if you want to use it.",
-      body: <AiKeyManager compact /> },
+    { key: "aikey", required: false, bg: "bg-sun", q: "Add a Nebius Token Factory key? (optional)", hint: "Totally optional — NaniAI already runs on NVIDIA. Add a Nebius Token Factory key to run on Nebius.",
+      body: <AiKeyManager compact nebiusOnly /> },
   ];
 
   const cur = steps[step];
@@ -975,7 +981,7 @@ function ProfilePage({ catalog, profile, onBack, onSave, onSignOut }: { catalog:
           <div className="brow">
             <label>Name<input value={d.preferred_name ?? ""} onChange={(e) => set({ preferred_name: e.target.value })} /></label>
             <label>Age<input inputMode="numeric" value={ageStr} onChange={(e) => { const v = e.target.value; if (v === "" || /^\d{1,3}$/.test(v)) setAgeStr(v); }} placeholder="e.g. 68" /></label>
-            <label>Home region<input list="pe-regions" value={d.region ?? ""} onChange={(e) => set({ region: e.target.value })} /><datalist id="pe-regions">{catalog.regions.map((r) => <option key={r} value={r} />)}</datalist></label>
+            <label>Country<input list="pe-regions" value={d.region ?? ""} onChange={(e) => set({ region: e.target.value })} /><datalist id="pe-regions">{catalog.regions.map((r) => <option key={r} value={r} />)}</datalist></label>
           </div>
         </section>
 
@@ -983,7 +989,7 @@ function ProfilePage({ catalog, profile, onBack, onSave, onSignOut }: { catalog:
           <h3>Taste</h3>
           <div className="bfield"><span>Cuisines you love</span><SearchMulti options={cuisineList} selected={(d.cuisines as string[]) ?? []} onToggle={(v) => toggle("cuisines", v)} placeholder="search / add a cuisine…" /></div>
           <div className="bfield"><span>Favourite dishes <small>(type any)</small></span>
-            <div className="dishadd"><input value={dishInput} onChange={(e) => setDishInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && dishInput.trim()) { e.preventDefault(); toggle("loved_dishes", dishInput.trim()); setDishInput(""); } }} placeholder="e.g. Hyderabadi biryani" /><button type="button" className="run ghost" onClick={() => { if (dishInput.trim()) { toggle("loved_dishes", dishInput.trim()); setDishInput(""); } }}>Add</button></div>
+            <div className="dishadd"><input value={dishInput} onChange={(e) => setDishInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && dishInput.trim()) { e.preventDefault(); toggle("loved_dishes", dishInput.trim()); setDishInput(""); } }} placeholder="e.g. pasta, sushi, jollof rice, tacos" /><button type="button" className="run ghost" onClick={() => { if (dishInput.trim()) { toggle("loved_dishes", dishInput.trim()); setDishInput(""); } }}>Add</button></div>
             <div className="checks" style={{ marginTop: 8 }}>{((d.loved_dishes as string[]) ?? []).map((f) => <button key={f} className="check on" onClick={() => toggle("loved_dishes", f)}>♥ {f} ✕</button>)}</div>
           </div>
           <div className="bfield"><span>Dietary pattern</span><div className="checks">{DIET.map((o) => <button key={o.v} className={`check ${d.dietary_pattern === o.v ? "on" : ""}`} onClick={() => set({ dietary_pattern: o.v })}>{o.l}</button>)}</div></div>
@@ -1002,7 +1008,7 @@ function ProfilePage({ catalog, profile, onBack, onSave, onSignOut }: { catalog:
         <section className="pcard">
           <h3>Lifestyle &amp; routine</h3>
           <div className="bfield"><span>You are a…</span><div className="checks">{(catalog.lifestyleRoles ?? []).map((r) => <button key={r} className={`check ${life.role === r ? "on" : ""}`} onClick={() => setLife("role", r)}>{r}</button>)}</div></div>
-          <div className="bfield"><span>Where do you live?</span><div className="checks">{["With parents/family", "With spouse/kids", "Alone", "Shared / PG / hostel"].map((v) => <button key={v} className={`check ${life.livesWith === v ? "on" : ""}`} onClick={() => setLife("livesWith", v)}>{v}</button>)}</div></div>
+          <div className="bfield"><span>Where do you live?</span><div className="checks">{["With parents/family", "With spouse/kids", "Alone", "Shared housing / hostel"].map((v) => <button key={v} className={`check ${life.livesWith === v ? "on" : ""}`} onClick={() => setLife("livesWith", v)}>{v}</button>)}</div></div>
           <div className="bfield"><span>Does your workplace/college provide food?</span><div className="checks">{["Yes, cafeteria/canteen", "Sometimes", "No, I arrange my own"].map((v) => <button key={v} className={`check ${life.workplaceFood === v ? "on" : ""}`} onClick={() => setLife("workplaceFood", v)}>{v}</button>)}</div></div>
           <div className="bfield"><span>Cooking time you usually have</span><div className="checks">{["Under 15 min", "15–30 min", "30–60 min", "I don't cook"].map((v) => <button key={v} className={`check ${life.cooking === v ? "on" : ""}`} onClick={() => setLife("cooking", v)}>{v}</button>)}</div></div>
           <div className="bfield"><span>Your meal times <small>(0–23h; drives what the dashboard shows now)</small></span>
@@ -1027,7 +1033,7 @@ function ProfilePage({ catalog, profile, onBack, onSave, onSignOut }: { catalog:
           <h3>Emergency contact</h3>
           <div className="brow">
             <label>Name<input value={d.emergency_name ?? ""} onChange={(e) => set({ emergency_name: e.target.value })} placeholder="e.g. Priya (daughter)" /></label>
-            <label>Phone (with country code)<input value={d.emergency_phone ?? ""} onChange={(e) => set({ emergency_phone: e.target.value.replace(/[^\d+]/g, "") })} placeholder="+9198XXXXXXXX" /></label>
+            <label>Phone (with country code)<input value={d.emergency_phone ?? ""} onChange={(e) => set({ emergency_phone: e.target.value.replace(/[^\d+]/g, "") })} placeholder="+1 555 000 1234" /></label>
           </div>
         </section>
 
@@ -1057,11 +1063,34 @@ function EmergencyScreen({ profile, onClose, onSave, onReopen }: { profile: Prof
   const [busy, setBusy] = useState(false);
   const phoneOk = isValidPhone(ePhone);
 
-  const HELPLINES = [
-    { n: "112", l: "National emergency (India)" },
-    { n: "108", l: "Ambulance (India)" },
-    { n: "104", l: "Health advice (India)" },
-    { n: "14416", l: "Tele-MANAS mental health (India)" },
+  // Country-appropriate emergency numbers (real, widely-published). Falls back to
+  // a universal message when the user's country isn't in the map.
+  const country = (profile.region ?? "").trim();
+  const HELPLINES_BY_COUNTRY: Record<string, { n: string; l: string }[]> = {
+    "India": [{ n: "112", l: "National emergency" }, { n: "108", l: "Ambulance" }, { n: "14416", l: "Tele-MANAS mental health" }],
+    "United States": [{ n: "911", l: "Emergency" }, { n: "988", l: "Suicide & Crisis Lifeline" }],
+    "Canada": [{ n: "911", l: "Emergency" }, { n: "988", l: "Suicide crisis helpline" }],
+    "United Kingdom": [{ n: "999", l: "Emergency" }, { n: "111", l: "NHS non-emergency" }],
+    "Ireland": [{ n: "112", l: "Emergency" }, { n: "999", l: "Emergency" }],
+    "Australia": [{ n: "000", l: "Emergency" }, { n: "13 11 14", l: "Lifeline" }],
+    "New Zealand": [{ n: "111", l: "Emergency" }],
+    "Germany": [{ n: "112", l: "Emergency" }, { n: "116117", l: "Non-emergency medical" }],
+    "France": [{ n: "112", l: "Emergency (EU)" }, { n: "15", l: "SAMU medical" }],
+    "Italy": [{ n: "112", l: "Emergency" }],
+    "Spain": [{ n: "112", l: "Emergency" }],
+    "Netherlands": [{ n: "112", l: "Emergency" }],
+    "Japan": [{ n: "119", l: "Ambulance / fire" }, { n: "110", l: "Police" }],
+    "South Korea": [{ n: "119", l: "Ambulance / fire" }, { n: "112", l: "Police" }],
+    "China": [{ n: "120", l: "Ambulance" }, { n: "110", l: "Police" }],
+    "Singapore": [{ n: "995", l: "Ambulance / fire" }, { n: "999", l: "Police" }],
+    "United Arab Emirates": [{ n: "998", l: "Ambulance" }, { n: "999", l: "Police" }],
+    "Saudi Arabia": [{ n: "997", l: "Ambulance" }, { n: "911", l: "Emergency (major cities)" }],
+    "South Africa": [{ n: "10177", l: "Ambulance" }, { n: "10111", l: "Police" }],
+    "Nigeria": [{ n: "112", l: "Emergency" }],
+  };
+  const HELPLINES = HELPLINES_BY_COUNTRY[country] ?? [
+    { n: "112", l: "Works across the EU, India & many countries" },
+    { n: "911", l: "US / Canada" },
   ];
 
   return (
@@ -1069,7 +1098,7 @@ function EmergencyScreen({ profile, onClose, onSave, onReopen }: { profile: Prof
       <div className="modal emg-screen" role="dialog" aria-label="Emergency" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head"><b>🚨 You&rsquo;re not alone</b><button className="signout" onClick={onClose}>close</button></div>
 
-        <div className="emg-alert">If this is life-threatening, call your local emergency number now. Numbers below are for <b>India</b> — if you&rsquo;re elsewhere, use your country&rsquo;s emergency number.</div>
+        <div className="emg-alert">If this is life-threatening, call your local emergency number now. {HELPLINES_BY_COUNTRY[country] ? <>Numbers below are for <b>{country}</b>.</> : <>Set your country in your profile for local numbers — otherwise use your country&rsquo;s emergency number.</>}</div>
 
         {hasContact && !editing && (
           <div className="emg-opened">✓ WhatsApp opened in a new tab for <b>{profile.emergency_name || "your contact"}</b> — press send there to alert them. Opening it doesn&rsquo;t send it automatically.
@@ -1093,7 +1122,7 @@ function EmergencyScreen({ profile, onClose, onSave, onReopen }: { profile: Prof
           <div className="emg-edit">
             <div className="emg-sub">Add a trusted contact so you can reach them in one tap next time:</div>
             <label>Contact name<input value={eName} onChange={(e) => setEName(e.target.value)} placeholder="e.g. Priya (daughter)" /></label>
-            <label>Phone with country code<input value={ePhone} onChange={(e) => setEPhone(e.target.value.replace(/[^\d+]/g, ""))} placeholder="+9198XXXXXXXX" /></label>
+            <label>Phone with country code<input value={ePhone} onChange={(e) => setEPhone(e.target.value.replace(/[^\d+]/g, ""))} placeholder="+1 555 000 1234" /></label>
             {!phoneOk && ePhone.length > 0 && <div className="emg-err">Enter a valid number with country code (8–15 digits).</div>}
             <div className="cta">
               <button className="run" disabled={!phoneOk || busy} onClick={async () => { setBusy(true); try { await onSave({ emergency_name: eName.trim() || null, emergency_phone: ePhone }); setEditing(false); } finally { setBusy(false); } }}>{busy ? "Saving…" : "Save contact"}</button>

@@ -15,27 +15,43 @@ export async function GET() {
       slots: d.slots,
     })),
     cuisines,
-    // Broad cuisine preference options (searchable in the UI). The vetted dish
-    // catalog is currently India-focused; these let users state preferences
-    // honestly even where we don't yet have matching vetted dishes.
+    // Broad, GLOBAL cuisine preference options (searchable in the UI). The vetted
+    // dish catalog is smaller than this list; these let users state preferences
+    // honestly across every region even where we don't yet have matching vetted dishes.
     cuisineOptions: [
-      "North Indian", "South Indian", "East Indian", "West Indian",
-      "Northeast Indian", "Central Indian", "Himalayan", "Coastal Indian",
-      "Mughlai", "Awadhi", "Chettinad", "Udupi", "Malvani", "Goan",
-      "Bengali", "Gujarati", "Rajasthani", "Maharashtrian", "Punjabi",
-      "Kashmiri", "Hyderabadi", "Andhra", "Kerala", "Tamil", "Karnataka",
-      "Italian", "Mediterranean", "Mexican", "American", "French",
-      "Chinese", "Thai", "Japanese", "Middle Eastern", "Continental",
+      // South Asia
+      "North Indian", "South Indian", "East Indian", "West Indian", "Northeast Indian",
+      "Mughlai", "Bengali", "Gujarati", "Rajasthani", "Punjabi", "Kashmiri",
+      "Hyderabadi", "Andhra", "Kerala", "Tamil", "Goan", "Chettinad", "Udupi",
+      "Pakistani", "Bangladeshi", "Sri Lankan", "Nepali",
+      // East & Southeast Asia
+      "Chinese", "Sichuan", "Cantonese", "Japanese", "Korean", "Taiwanese",
+      "Thai", "Vietnamese", "Indonesian", "Malaysian", "Filipino", "Singaporean",
+      // Middle East & West Asia
+      "Lebanese", "Turkish", "Persian", "Israeli", "Syrian", "Gulf / Arabian", "Middle Eastern",
+      // Europe
+      "Italian", "French", "Spanish", "Greek", "Mediterranean", "German",
+      "Portuguese", "British", "Nordic", "Balkan", "Eastern European", "Continental",
+      // Africa
+      "Ethiopian", "Nigerian", "Ghanaian", "Moroccan", "Egyptian", "Kenyan",
+      "Senegalese", "South African", "West African", "North African",
+      // Americas
+      "American", "Southern US", "Cajun / Creole", "Canadian", "Mexican",
+      "Caribbean", "Brazilian", "Peruvian", "Colombian", "Argentinian", "Venezuelan",
+      // Oceania & styles
+      "Australian", "New Zealand", "Pacific Islander", "Fusion", "Vegan / Plant-based",
     ],
-    // All Indian states + union territories (+ "" = any), used as the regional anchor.
+    // Countries (+ "" = any) — the user's home country, for a local taste nudge and
+    // for country-appropriate emergency guidance. (We record country, not state.)
     regions: [
-      "", "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
-      "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka",
-      "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram",
-      "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu",
-      "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal",
-      "Andaman and Nicobar Islands", "Chandigarh", "Dadra and Nagar Haveli and Daman and Diu",
-      "Delhi", "Jammu and Kashmir", "Ladakh", "Lakshadweep", "Puducherry",
+      "", "India", "Pakistan", "Bangladesh", "Sri Lanka", "Nepal",
+      "United States", "Canada", "Mexico", "Brazil", "Argentina", "Colombia", "Peru", "Chile", "Venezuela",
+      "United Kingdom", "Ireland", "France", "Germany", "Italy", "Spain", "Portugal", "Greece",
+      "Netherlands", "Belgium", "Switzerland", "Sweden", "Norway", "Denmark", "Poland", "Russia", "Ukraine",
+      "China", "Japan", "South Korea", "Taiwan", "Thailand", "Vietnam", "Indonesia", "Malaysia",
+      "Singapore", "Philippines", "Australia", "New Zealand",
+      "United Arab Emirates", "Saudi Arabia", "Qatar", "Turkey", "Iran", "Israel", "Lebanon", "Syria",
+      "Egypt", "Morocco", "Nigeria", "Ghana", "Kenya", "Senegal", "South Africa", "Ethiopia",
     ],
     conditions: [
       { id: "type_2_diabetes", label: "Type 2 diabetes" },
