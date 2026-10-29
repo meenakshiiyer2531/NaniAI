@@ -11,7 +11,8 @@
     "lint": "next lint",
     "eval": "tsx lib/eval/run.ts",
     "test:schedule": "tsx lib/eval/schedule-test.ts",
-    "test:isolation": "node tests/account-isolation.mjs"
+    "test:isolation": "node tests/account-isolation.mjs",
+    "test:rls": "node --env-file=.env.staging scripts/verify-rls-staging.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

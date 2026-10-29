@@ -16,3 +16,5 @@ tsconfig.tsbuildinfo
 # Playwright test artifacts (local only)
 /test-results
 /tests/.artifacts
+!.env.example
+!.env.staging.example

@@ -1,0 +1,61 @@
+name: Staging RLS verification
+
+# REAL Row-Level-Security verification against a DEDICATED STAGING Supabase
+# project. Kept SEPARATE from the mocked account-isolation E2E in ci.yml — this
+# job exercises live auth + RLS and therefore needs real staging secrets.
+#
+# It never runs against production (the script refuses if the staging URL equals
+# NEXT_PUBLIC_SUPABASE_URL) and only touches the two disposable accounts it makes.
+#
+# Trigger manually (Actions → this workflow → Run). The weekly schedule is
+# intentionally DISABLED until a staging project + secrets exist and the first
+# manual run succeeds — otherwise it would fail every week on missing secrets.
+#
+# To RE-ENABLE weekly runs after staging is configured and a manual run passes:
+#   uncomment the `schedule:` block below.
+# Configure these repo/environment secrets first (Settings → Secrets → Actions):
+#   STAGING_SUPABASE_URL, STAGING_SUPABASE_ANON_KEY, STAGING_SUPABASE_SERVICE_ROLE_KEY
+
+on:
+  workflow_dispatch:
+  # schedule:
+  #   - cron: "17 6 * * 1" # Mondays, 06:17 UTC — enable after first successful staging run
+
+jobs:
+  rls:
+    name: Live RLS isolation (staging)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      STAGING_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+      STAGING_SUPABASE_ANON_KEY: ${{ secrets.STAGING_SUPABASE_ANON_KEY }}
+      STAGING_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Preflight — require staging secrets (fail clearly, never skip)
+        run: |
+          missing=0
+          for v in STAGING_SUPABASE_URL STAGING_SUPABASE_ANON_KEY STAGING_SUPABASE_SERVICE_ROLE_KEY; do
+            if [ -z "${!v}" ]; then echo "::error::Missing required secret: $v"; missing=1; fi
+          done
+          if [ "$missing" = "1" ]; then
+            echo "Staging RLS secrets are not configured. This job fails rather than silently skipping."
+            exit 1
+          fi
+          echo "All staging secrets present."
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run live RLS verification (staging only)
+        # Secrets are passed via env above; never echoed. The script reads them
+        # from process.env (no --env-file in CI).
+        run: node scripts/verify-rls-staging.mjs
