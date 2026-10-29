@@ -133,6 +133,12 @@ export default function Home() {
   const [servings, setServings] = useState(1);
   const [prepared, setPrepared] = useState<Record<string, boolean>>({});
 
+  // Always-current authenticated user id, readable inside async callbacks so a
+  // response that arrives AFTER an account switch can be discarded (a stale
+  // fetch from the previous user must never write into the new user's view).
+  const userIdRef = useRef(userId);
+  useEffect(() => { userIdRef.current = userId; }, [userId]);
+
   useEffect(() => {
     fetch("/api/personas").then((r) => r.json()).then((d) => setStatus(d.status)).catch(() => {});
     fetch("/api/catalog").then((r) => r.json()).then(setCatalog).catch(() => {});
@@ -140,7 +146,23 @@ export default function Home() {
     supabase.auth.getSession().then(({ data: { session } }) => setUserId(session?.user?.id ?? null));
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
       setUserId(session?.user?.id ?? null);
-      if (!session) setProfile(null);
+      // On sign-out, wipe EVERY piece of per-user state so nothing from the
+      // previous account can linger in memory or flash to the next user who
+      // signs in on this device.
+      if (!session) {
+        setProfile(null);
+        setData(null);
+        setFeedback({});
+        setPrepared({});
+        setServings(1);
+        setSwapIdx({});
+        setExpanded({});
+        setShowProfile(false);
+        setShowEmergency(false);
+        setShowFullDay(false);
+        setError("");
+        setLoading(false);
+      }
     });
     return () => sub.subscription.unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -150,6 +172,13 @@ export default function Home() {
   useEffect(() => {
     if (!supabase || !userId) return;
     let cancel = false;
+    // Clear the previous user's transient plan/state before loading this user's
+    // data, so a fast account switch never shows another person's meal plan.
+    setData(null);
+    setFeedback({});
+    setPrepared({});
+    setSwapIdx({});
+    setExpanded({});
     (async () => {
       const { data: row } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
       if (cancel) return;
@@ -219,6 +248,7 @@ export default function Home() {
 
   async function run(nextDay = 0) {
     if (!profile) return;
+    const callUser = userIdRef.current; // whose request this is
     setLoading(true); setError(""); setData(null); setSwapIdx({}); setExpanded({});
     try {
       const res = await fetch("/api/plan", {
@@ -226,11 +256,16 @@ export default function Home() {
         body: JSON.stringify({ persona: profileToPersona(profile), day: nextDay }),
       });
       const json = await res.json();
+      // Account switched (or signed out) while this was in flight — drop it.
+      if (userIdRef.current !== callUser) return;
       if (!res.ok) throw new Error(json.error ?? "request failed");
       setData(json);
       setExpanded({ [slotForHour(new Date().getHours(), readSchedule((profile?.lifestyle as any)?.schedule))]: true }); // auto-open the meal for right now
-    } catch (e) { setError((e as Error).message); }
-    finally { setLoading(false); }
+    } catch (e) {
+      if (userIdRef.current !== callUser) return; // don't surface a stale error either
+      setError((e as Error).message);
+    }
+    finally { setLoading(false); } // always clear the spinner (carries no user data)
   }
 
   async function saveProfile(patch: Partial<Profile>) {
