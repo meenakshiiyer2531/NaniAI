@@ -41,18 +41,51 @@ export async function GET() {
       "Southern US", "Cajun / Creole", "Canadian", "Colombian", "Argentinian", "Venezuelan",
       // Oceania & styles
       "Australian", "New Zealand", "Pacific Islander", "Fusion", "Vegan / Plant-based",
+      // More across the globe
+      "Afghan", "Burmese", "Cambodian", "Laotian", "Mongolian", "Tibetan", "Bhutanese",
+      "Georgian", "Armenian", "Azerbaijani", "Uzbek", "Kazakh",
+      "Iraqi", "Yemeni", "Jordanian", "Palestinian", "Emirati", "Saudi",
+      "Russian", "Ukrainian", "Polish", "Hungarian", "Czech", "Romanian", "Bulgarian",
+      "Croatian", "Serbian", "Austrian", "Swiss", "Dutch", "Belgian", "Scandinavian", "Finnish", "Icelandic",
+      "Tunisian", "Algerian", "Libyan", "Sudanese", "Ivorian", "Cameroonian",
+      "Tanzanian", "Ugandan", "Rwandan", "Zimbabwean", "Mozambican", "Somali", "Eritrean",
+      "Cuban", "Jamaican", "Puerto Rican", "Dominican", "Haitian", "Trinidadian",
+      "Guatemalan", "Costa Rican", "Panamanian", "Ecuadorian", "Bolivian", "Uruguayan", "Chilean",
     ],
-    // Countries (+ "" = any) — the user's home country, for a local taste nudge and
-    // for country-appropriate emergency guidance. (We record country, not state.)
+    // Countries (+ "" = any) across every continent — the user's home country,
+    // for a local taste nudge and country-appropriate emergency guidance.
     regions: [
-      "", "India", "Pakistan", "Bangladesh", "Sri Lanka", "Nepal",
-      "United States", "Canada", "Mexico", "Brazil", "Argentina", "Colombia", "Peru", "Chile", "Venezuela",
+      "",
+      // South Asia
+      "India", "Pakistan", "Bangladesh", "Sri Lanka", "Nepal", "Bhutan", "Maldives", "Afghanistan",
+      // East & Southeast Asia
+      "China", "Japan", "South Korea", "North Korea", "Taiwan", "Hong Kong", "Mongolia",
+      "Thailand", "Vietnam", "Indonesia", "Malaysia", "Singapore", "Philippines",
+      "Myanmar", "Cambodia", "Laos", "Brunei",
+      // Middle East & West/Central Asia
+      "United Arab Emirates", "Saudi Arabia", "Qatar", "Kuwait", "Bahrain", "Oman",
+      "Turkey", "Iran", "Iraq", "Israel", "Palestine", "Lebanon", "Jordan", "Syria", "Yemen",
+      "Kazakhstan", "Uzbekistan", "Azerbaijan", "Georgia", "Armenia",
+      // Europe
       "United Kingdom", "Ireland", "France", "Germany", "Italy", "Spain", "Portugal", "Greece",
-      "Netherlands", "Belgium", "Switzerland", "Sweden", "Norway", "Denmark", "Poland", "Russia", "Ukraine",
-      "China", "Japan", "South Korea", "Taiwan", "Thailand", "Vietnam", "Indonesia", "Malaysia",
-      "Singapore", "Philippines", "Australia", "New Zealand",
-      "United Arab Emirates", "Saudi Arabia", "Qatar", "Turkey", "Iran", "Israel", "Lebanon", "Syria",
-      "Egypt", "Morocco", "Nigeria", "Ghana", "Kenya", "Senegal", "South Africa", "Ethiopia",
+      "Netherlands", "Belgium", "Luxembourg", "Switzerland", "Austria",
+      "Sweden", "Norway", "Denmark", "Finland", "Iceland",
+      "Poland", "Czechia", "Slovakia", "Hungary", "Romania", "Bulgaria",
+      "Croatia", "Serbia", "Bosnia and Herzegovina", "Albania",
+      "Russia", "Ukraine", "Belarus",
+      // Africa
+      "Egypt", "Morocco", "Algeria", "Tunisia", "Libya", "Sudan",
+      "Nigeria", "Ghana", "Senegal", "Ivory Coast", "Cameroon",
+      "Kenya", "Ethiopia", "Tanzania", "Uganda", "Rwanda",
+      "South Africa", "Zimbabwe", "Zambia", "Mozambique",
+      // North & Central America
+      "United States", "Canada", "Mexico", "Guatemala", "Cuba", "Jamaica",
+      "Dominican Republic", "Haiti", "Costa Rica", "Panama", "Trinidad and Tobago",
+      // South America
+      "Brazil", "Argentina", "Colombia", "Peru", "Chile", "Venezuela",
+      "Ecuador", "Bolivia", "Uruguay", "Paraguay",
+      // Oceania
+      "Australia", "New Zealand", "Fiji", "Papua New Guinea",
     ],
     conditions: [
       { id: "type_2_diabetes", label: "Type 2 diabetes" },

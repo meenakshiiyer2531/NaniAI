@@ -1,166 +1,232 @@
-# NaniAI 🍲
+# NaniAI 🌍🍲
 
-**Meals that respect your health *and* your culture.**
+**Your personal, culturally-aware, health-safe food companion — worldwide.**
 
-NaniAI is a personalized food & wellness companion. It pairs a **deterministic clinical-safety gate** with **Qloo's cultural taste graph** and a real **NVIDIA open-source model**, so its advice is simultaneously *safe* and *familiar* — the millet version of the dish your grandmother already loves, not a kale smoothie.
+NaniAI plans meals that respect **your health limits** *and* **your culture**. It pairs a
+**deterministic clinical-safety gate** with **Qloo's cultural taste graph** and a real
+**NVIDIA open-source model (Nemotron)** so its advice is simultaneously *safe* and *familiar* —
+the version of a dish you already love, adapted to your conditions, anywhere in the world.
 
-Built for real, different lives: **seniors with health conditions, new mothers, students in PGs/hostels, busy professionals**, and anyone who wants to eat well without giving up the food they love. It learns your cuisines, favourite dishes, allergies, conditions, medications, lifestyle and daily routine during onboarding, then plans a safe, familiar day — and highlights the right meal for the time of day (breakfast in the morning, dinner at night).
+- **Live demo:** https://naniai-vi-me.vercel.app
+- **Default AI:** real NVIDIA Nemotron inference (live status at `/api/model/health`)
+- **Global:** 130+ selectable cuisines, 120+ countries, a vetted multi-cuisine dish catalog, and
+  country-appropriate emergency guidance.
 
-> Runs end-to-end with **no API keys** (deterministic mock mode), lights up the live Qloo taste graph the moment a Qloo key is present, and routes its language reasoning to **any OpenAI-compatible model** (e.g. NVIDIA's API, or Nebius) via one env switch.
-
-## What you can do
-
-- **Create a private account** (email/password) — your health profile is stored per-user with database Row Level Security.
-- **Onboard conversationally**, one question at a time: name, age, gender (sets your avatar), cuisines you love (all-India + international, searchable + free text), favourite dishes (type anything), allergies, **any** health condition or medication (free-text search, not a fixed list), spice/texture, lifestyle (working/student, living arrangement, workplace food, cook time), and an optional emergency contact.
-- **Plan a safe, familiar day** — breakfast, lunch, snack, dinner — with the current time's meal auto-highlighted and suggested meal times.
-- **Swap any meal** between safe, culturally-close options; see the recipe, nutrition, and a recipe-video link.
-- **Ask NaniAI** anything about food, swaps, ingredients, and general nutrition — answered by a real NVIDIA open model, using your profile for context, with safety guardrails (medication/emergency questions are routed, never model-cleared).
-- **Emergency**: one tap opens WhatsApp to your trusted contact with a prefilled message, alongside a calming breathing guide and verified helpline numbers.
-- **Edit everything** anytime on a dedicated profile page.
-
-## Integration status (honest)
-
-| Capability | State |
-|---|---|
-| Live Qloo Taste AI™ | **Active.** Each dish is resolved to its real Qloo specialty-dish tag + popularity; cuisines carry real regional affinity. Fetched from the live API and cached as a committed snapshot (`lib/qloo/snapshot.ts`) so the hosted app is instant and reliable. Validate the key live at `/api/qloo/health`. |
-| Clinician safety gate | **Active.** Deterministic, model cannot override. |
-| Reasoning LLM | **Provider-neutral, optional.** The model gateway speaks the OpenAI-compatible chat API; set `MODEL_PROVIDER=openai` + `LLM_BASE_URL` + `LLM_API_KEY` + `LLM_MODEL` to run a real NVIDIA open model. Without it the app uses a deterministic narrator, clearly labeled — never a fabricated model call. Validate live at `/api/model/health`. |
-| Auth + user profiles | **Active when Supabase is configured.** Email/password auth + per-user profiles in Supabase Postgres with Row Level Security (own-row only). Falls back to a clear "awaiting configuration" screen if env vars are absent. See [Authentication & user data](#authentication--user-data-supabase). |
-
-We never pass mock output off as a live integration: the UI and API always label the real source.
-
+> Runs end-to-end in a **keyless deterministic mode** for local dev, lights up the **live Qloo**
+> taste graph when a Qloo key is present, and routes language reasoning to **any OpenAI-compatible
+> model** — NVIDIA's API by default, or **Nebius Token Factory** — via one env switch or a per-user key.
 
 ---
 
-## The problem
+## What you can do
 
-Diet advice for seniors fails in practice not because the medicine is wrong, but because it is **culturally blind**. Telling a South Indian diabetic grandmother to eat oatmeal and kale is *technically functional*. Offering her a millet idli and a date-sweetened payasam is *actually good*. Adherence tracks familiarity, not nutritional correctness alone.
+- **Create a private account** (email + password). Your health profile is isolated per-user by
+  Postgres Row-Level Security.
+- **Onboard one question at a time:** name, age, the **cuisines you love** (searchable, global,
+  free-text), favourite dishes, allergies, **any** condition or medication (live medical-terminology
+  search, not a fixed list), spice/texture, lifestyle & schedule, **home country**, an optional
+  emergency contact, and an optional **Nebius Token Factory key**.
+- **Get a safe, familiar, globally-diverse day** — breakfast, lunch, snack, dinner — with the
+  current meal highlighted and the next meal's prep surfaced.
+- **Coherent complete plates** (main + accompaniments that match the cuisine), serving-size scaling,
+  a merged grocery list, recipe detail pages, and a DB-persisted prep checklist.
+- **Ask NaniAI** anything about food/cooking/nutrition — answered by the real NVIDIA model with your
+  profile as context and deterministic safety guardrails (medication/emergency questions are routed,
+  never model-cleared).
+- **Emergency:** one tap opens WhatsApp to your trusted contact with a prefilled message, plus a
+  calming breathing guide and **country-specific helpline numbers**.
+- **Bring your own key (optional):** add your own **NVIDIA** or **Nebius Token Factory** key in
+  Profile — encrypted at rest, used only for your requests.
 
-The hard part is reconciling two forces generic LLMs blur together:
-- **Non-negotiable medical constraints** (sugar/sodium caps, drug–food interactions, chewing/swallowing ability)
-- **Deeply personal cultural taste**
-
-NaniAI puts a deterministic agent in charge of the first and Qloo in charge of the second, and makes them **negotiate**.
-
-## Why this needs Qloo (the "worse without it" test)
-
-Turn Qloo off and the agent collapses every user to a generic diet chart. Turn it on and it finds the person's *actual* taste neighborhood and the culturally-adjacent dishes nearby. The difference is **measured live in the app** as a side-by-side plan, and in the eval harness as a familiarity delta. On our demo personas, Qloo adds **+14 to +23 points** of cultural familiarity at **zero** medical-safety violations.
-
-The irreplaceable moment: when a beloved dish is unsafe, Qloo substitutes the **culturally closest** safe dish (Masala Dosa → Vegetable *Uttapam*, the same fermented batter), while the culturally-blind baseline just drops it and suggests plain oatmeal.
-
-## The agentic workflow (not a chatbot)
-
-Three cooperating steps run **server-side**; the customer UI shows a friendly explanation (via a hover ⓘ), never internal agent traces:
-
-1. **Clinician agent** — deterministic hard-constraint gate (`lib/agents/clinician.ts`). Enforces sugar/sodium/carb/potassium caps, texture (IDDSI-inspired), allergies, and drug–food interactions. **The LLM cannot widen this set.**
-2. **Culture agent** — queries Qloo (`lib/agents/culture.ts` + `lib/qloo/`) for cultural familiarity of each *safe* candidate.
-3. **Negotiator** — composes the day, and when a favorite is unsafe, proposes the **taste-preserving substitution**, then narrates the plan in plain language via the configured model (`lib/agents/negotiator.ts`).
-
-## Differentiators
-
-1. **Taste-Preserving Substitution Engine** — nearest *culturally-adjacent* safe dish, not a random healthy one.
-2. **Hard-Constraint Clinician Gate** — deterministic safety the model can't override.
-3. **Any-condition / any-medication** — free-text search, not a fixed list; mapped to safety rules where we have them, saved as context otherwise. Never a diagnosis.
-4. **Qloo-grounded ranking** — measured in the eval harness as a familiarity delta vs a culturally-blind baseline (`npm run eval`).
-5. **Honest sourcing** — the app never presents mock data as a live Qloo or model result; `/api/qloo/health` and `/api/model/health` verify the real integrations.
-6. **Time-aware & personalized** — current meal highlighted by time of day; plans shaped by cuisines, favourites, lifestyle, and routine.
-7. **Portable Model Gateway** — one agent, a provider-neutral brain: deterministic keyless mock ↔ any OpenAI-compatible **NVIDIA open-source model**, selected by env var.
+---
 
 ## Architecture
 
-```
-Frontend (Next.js) ── /api/plan ──> Orchestrator
-                                      ├─ Clinician gate (deterministic)
-                                      ├─ Culture agent ──> Qloo API  (lib/qloo/live.ts → mock fallback)
-                                      └─ Negotiator  ──> Model Gateway ──> mock | OpenAI-compatible NVIDIA open model
+### System overview
+
+```mermaid
+flowchart TD
+    U["User (browser)"] -->|"email + password"| AUTH["Supabase Auth"]
+    U --> UI["Next.js App Router + React UI"]
+    UI -->|"session token"| API["API routes (server)"]
+
+    subgraph Server["Next.js server (Vercel)"]
+      API --> PLAN["/api/plan"]
+      API --> CHAT["/api/chat"]
+      API --> TERM["/api/terminology"]
+      API --> KEY["/api/ai-key (BYOK)"]
+      PLAN --> ORCH["Agentic orchestrator"]
+      ORCH --> CLIN["Clinician gate (deterministic)"]
+      ORCH --> CULT["Culture agent (Qloo)"]
+      ORCH --> NEG["Negotiator (compose plates)"]
+      NEG --> GW["Model gateway"]
+    end
+
+    CLIN --> DISHES[("Vetted dish catalog")]
+    CULT --> QLOO["Qloo Taste AI (live + snapshot)"]
+    GW -->|"MODEL_PROVIDER / per-user key"| NVIDIA["NVIDIA API (Nemotron)"]
+    GW -.->|"if Nebius key set"| NEBIUS["Nebius Token Factory"]
+    GW -.->|"on failure"| MOCK["Deterministic fallback (labeled)"]
+
+    API --> DB[("Supabase Postgres + RLS")]
+    KEY -->|"AES-256-GCM"| DB
+    TERM --> NLM["NLM Clinical Tables (conditions / meds)"]
 ```
 
-See [`docs/superpowers/specs/2026-10-27-naniai-culturally-grounded-meal-agent-design.md`](docs/superpowers/specs/2026-10-27-naniai-culturally-grounded-meal-agent-design.md) for the full design, sequence diagram, and risk register.
+### Meal-plan request flow
 
-## Run it locally
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant API as /api/plan
+    participant C as Clinician (deterministic)
+    participant Q as Culture (Qloo)
+    participant N as Negotiator
+    participant M as Model gateway (NVIDIA/Nebius)
+    U->>API: persona + day (+ session token)
+    API->>C: derive hard constraints (conditions, allergies, texture)
+    API->>Q: affinity for safe candidates (user's cuisines)
+    API->>N: compose cuisine-coherent plates from SAFE dishes only
+    N->>M: narrate plan (per-user key if provided, else default)
+    M-->>N: explanation (or labeled deterministic fallback)
+    API->>C: re-check every plate against caps
+    API-->>U: plan + narration + provenance (never overrides safety)
+```
+
+**Invariant:** the clinician safety gate is the final authority. Qloo, external data, and the LLM
+can rank and explain — they can **never** override an allergy, clinical, or texture decision.
+
+---
+
+## Tech stack
+
+Next.js 15 (App Router) · React 19 · TypeScript · Supabase (Postgres + Auth + Row-Level Security) ·
+Qloo Taste AI™ · NVIDIA Nemotron (OpenAI-compatible) · Nebius Token Factory (optional) · Vercel.
+
+---
+
+## AI providers (explicit & honest)
+
+The model gateway (`lib/modelGateway.ts`) is provider-neutral and **never guesses** the provider
+from a model name. `/api/model/health` reports the real provider, model, host, and `infra`
+classification (`nvidia-api` / `nebius` / `other`).
+
+| Mode | How | Used for |
+|---|---|---|
+| **NVIDIA (default)** | `MODEL_PROVIDER=nvidia` + `LLM_BASE_URL`/`LLM_API_KEY`/`LLM_MODEL` | Built-in reasoning for chat + plan explanations |
+| **Nebius Token Factory** | `MODEL_PROVIDER=nebius` + `NEBIUS_API_KEY` + `NEBIUS_MODEL` | Runs inference on Nebius infrastructure |
+| **Per-user BYOK** | Profile → add your NVIDIA or Nebius key (encrypted) | That user's requests only |
+| **Deterministic fallback** | Automatic on failure / no config | Clearly labeled "mock" — **never** passed off as live AI |
+
+`npm run verify:nebius` makes a real request and **fails** unless it genuinely hits a Nebius host —
+so a Nebius claim can't be faked.
+
+---
+
+## Security & privacy
+
+- **Per-user isolation:** `profiles`, `meal_prep`, and `user_api_keys` all enforce
+  `auth.uid()` Row-Level Security — a user can only read/write their own rows.
+- **Encrypted BYOK:** user API keys are encrypted with **AES-256-GCM** using a server-only
+  `BYOK_ENCRYPTION_KEY`; the key is never returned to the browser, logged, or stored in plaintext.
+  If the encryption secret is absent, the feature **fails safe** (never stores plaintext).
+- **Cross-account safety:** signing out wipes all per-user in-memory state; a stale in-flight
+  response can't repopulate another account's view (identity-guarded). Covered by an automated
+  Playwright suite (`test:isolation`).
+- **Secrets** live only in env (`.env.local`, host env) — never committed.
+
+---
+
+## Data & honesty
+
+- **Nutrition values are clearly-labeled estimates** (shown as "Estimated"), not lab-measured —
+  used for guidance, never as a medical claim. We never fabricate sourced nutrition.
+- **Qloo** provides the cultural taste signal (live + a committed snapshot for instant hosting);
+  internal popularity metadata is kept out of user-facing text.
+- **Medical terminology** search uses the free NLM Clinical Tables API and sends only the typed term.
+
+---
+
+## Setup
 
 ```bash
 npm install
-npm run dev          # http://localhost:3000  (works with NO keys — deterministic mock)
+cp .env.example .env.local   # fill in what you want to enable (all optional for mock mode)
+npm run dev
 ```
 
-Evaluate the Qloo ablation (offline, reproducible):
+### Environment variables (names only — never commit real values)
+
+| Variable | Purpose |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase client (browser-safe) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-only admin (migrations, user cleanup) |
+| `POSTGRES_URL_NON_POOLING` | Direct Postgres URL for the migration runner |
+| `MODEL_PROVIDER` | `nvidia` \| `nebius` \| `mock` |
+| `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` | NVIDIA / OpenAI-compatible provider |
+| `NEBIUS_BASE_URL`, `NEBIUS_API_KEY`, `NEBIUS_MODEL` | Nebius Token Factory provider |
+| `BYOK_ENCRYPTION_KEY` | 32-byte server-only key for encrypting per-user BYOK keys |
+| `QLOO_API_KEY`, `QLOO_BASE_URL` | Live Qloo taste graph (optional) |
+
+### Database migrations
+
+Run in order (Supabase SQL editor, or the runner):
 
 ```bash
-npm run eval
+node --env-file=.env.local scripts/run-migration.mjs supabase/migrations/0001_init.sql
+# 0002_meal_prep.sql · 0003_profile_feedback.sql · 0004_user_api_keys.sql · 0005_user_api_key_model.sql
 ```
 
-## Light up the live integrations
+| Migration | Adds |
+|---|---|
+| `0001_init` | `profiles` + RLS |
+| `0002_meal_prep` | per-user meal-prep checklist + RLS |
+| `0003_profile_feedback` | meal feedback (off-device) |
+| `0004_user_api_keys` | encrypted BYOK keys + RLS |
+| `0005_user_api_key_model` | optional BYOK model id (Nebius) |
 
-Copy `.env.example` → `.env.local` and fill in what you have:
+---
 
-```bash
-# Cultural intelligence (Qloo)
-QLOO_API_KEY=...                 # your Qloo API key
+## Testing
 
-# Reasoning LLM — a real NVIDIA open-source model via ANY OpenAI-compatible host.
-MODEL_PROVIDER=openai
-LLM_API_KEY=...
-LLM_MODEL=nvidia/llama-3.1-nemotron-70b-instruct   # confirm the exact id in your provider's catalog
+| Command | Checks |
+|---|---|
+| `npx tsc --noEmit` | Types |
+| `npm run lint` | ESLint (Next + TypeScript) |
+| `npm run test:schedule` | Time-aware meal scheduling (pure) |
+| `npm run eval` | Clinical safety gate — expects **0 violations** across personas |
+| `npm run test:isolation` | Cross-account isolation E2E (Playwright, mocked auth) |
+| `npm run test:aikey` | Live BYOK round-trip (encrypted-at-rest, cross-user isolation) |
+| `npm run verify:nebius` | Strict Nebius inference check (fails on NVIDIA's API) |
+| `npm run test:rls` | Live RLS verification on a dedicated staging project (see `STAGING.md`) |
+| `npm run build` | Production build |
 
-# Pick ONE base URL:
-LLM_BASE_URL=https://integrate.api.nvidia.com/v1   # NVIDIA's API (free credits) — real NVIDIA open model
-# LLM_BASE_URL=https://api.studio.nebius.ai/v1     # Nebius (OpenAI-compatible) — alternative host
+---
+
+## Project structure
+
+```
+app/            # App Router pages + API routes (plan, chat, ai-key, terminology, catalog, model/health)
+lib/agents/     # orchestrator, clinician (safety), culture (Qloo), negotiator (plates)
+lib/data/       # vetted dish catalog
+lib/qloo/       # live Qloo client + committed snapshot + deterministic mock
+lib/crypto/     # AES-256-GCM secret box (BYOK)
+lib/modelGateway.ts   # provider-neutral model gateway (NVIDIA / Nebius / mock)
+supabase/migrations/  # SQL migrations
+scripts/        # migration runner, Nebius/RLS/BYOK verification
+tests/          # account-isolation Playwright suite
+docs/hackathon/ # submission materials
 ```
 
-The app degrades gracefully: a missing/broken key falls back to the deterministic mock and **says so** in the UI — it never fabricates a Qloo number, a model call, or an unsafe plan. Validate a configured LLM at `/api/model/health` and Qloo at `/api/qloo/health`.
-
-## Deploy
-
-```bash
-# Vercel (recommended): set the env vars in the project settings, then
-vercel --prod
-```
-
-Secrets are read server-side only (API routes); nothing is exposed to the browser.
-
-## Model provider options
-
-The gateway is provider-neutral — any OpenAI-compatible endpoint works. To run a real **NVIDIA open-source model** (e.g. Nemotron):
-
-| Host | `LLM_BASE_URL` | Notes |
-|---|---|---|
-| NVIDIA API | `https://integrate.api.nvidia.com/v1` | Free credits; quickest way to a real NVIDIA open model. |
-| Nebius | `https://api.studio.nebius.ai/v1` | OpenAI-compatible host; also serves NVIDIA open models. |
-| OpenRouter / vLLM / others | provider URL | Any OpenAI-compatible host. |
-
-Set `MODEL_PROVIDER=openai`, `LLM_API_KEY`, `LLM_MODEL`, and the chosen `LLM_BASE_URL`. No code changes needed.
-
-## Authentication & user data (Supabase)
-
-Email/password auth and per-user profiles are backed by **Supabase** (Postgres + Auth). Each user's data is isolated by **Row Level Security** — enforced in the database, not the app — so one account can never read or write another's profile.
-
-**Setup:**
-
-1. Create a free project at [supabase.com](https://supabase.com).
-2. Run the schema + RLS policies: open the SQL editor and paste [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql) (or `node --env-file=.env.local scripts/run-migration.mjs supabase/migrations/0001_init.sql`).
-3. Set these env vars (URL + anon key are browser-safe; the service-role key is **server-only**):
-
-```bash
-NEXT_PUBLIC_SUPABASE_URL=...
-NEXT_PUBLIC_SUPABASE_ANON_KEY=...
-SUPABASE_SERVICE_ROLE_KEY=...        # server only — never exposed to the client
-```
-
-**How it works:**
-- Sign-up runs server-side (`/api/auth/signup`) with the service-role key and marks the user email-confirmed, so there's no email round-trip for the demo. (Leave Supabase's "Confirm email" off, or remove that route to require confirmation.)
-- Login/session use the public anon key in the browser; the user's JWT drives RLS.
-- The `profiles` table auto-provisions a row per new user (trigger) and holds the full onboarding profile; identity is always derived from the verified session, never a browser-supplied id.
-- If the Supabase env vars are absent, the app shows a clear "awaiting configuration" screen instead of a fake login.
-
-**Verify the data path** (auth + RLS isolation + CRUD) against a running local server:
-
-```bash
-node --env-file=.env.local scripts/test-auth-flow.mjs
-```
+---
 
 ## License
 
-[Apache 2.0](LICENSE).
+[MIT](LICENSE).
 
-> ⚕️ NaniAI is a decision-support prototype, not medical advice. Nutrition values are illustrative. Always consult a clinician.
+## Acknowledgements
+
+Cultural taste intelligence by **Qloo**. Language reasoning by **NVIDIA** open models (Nemotron),
+runnable on **Nebius Token Factory**. Medical terminology from the U.S. **National Library of
+Medicine** Clinical Tables. NaniAI never claims medical clearance from a model — safety is
+deterministic.
